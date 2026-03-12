@@ -1,0 +1,39 @@
+{
+  "run_at": "2026-03-12T15:27:50.282928",
+  "config": {
+    "random_seed": 42,
+    "n_accounts": 200,
+    "n_clusters": 20,
+    "simulation_days": 400,
+    "decay_lambda": 0.03
+  },
+  "simulation": {
+    "total_posts_raw": 15110,
+    "total_posts_after_pipeline": 14910,
+    "survival_rate": 0.5005,
+    "corr_quality_reach": 0.0266,
+    "corr_cluster_reach": 0.0129,
+    "corr_reach_survived": 0.0717
+  },
+  "metrics": {
+    "val": {
+      "split": "val",
+      "roc_auc": 0.854787276224104,
+      "log_loss": 0.4745643327794332
+    },
+    "test": {
+      "split": "test",
+      "roc_auc": 0.8354268585131894,
+      "log_loss": 0.5003291056947331
+    }
+  },
+  "feature_importance": {
+    "rolling_volatility": 669,
+    "rolling_weighted_median": 648,
+    "content_quality": 544,
+    "cluster_entropy": 452,
+    "cluster_id": 324,
+    "posting_frequency": 65,
+    "posting_time_bucket": 28
+  }
+}
