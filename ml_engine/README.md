@@ -1,6 +1,6 @@
 # ML Engine
 
-The predictive core of CreatorDynamics. Handles synthetic data simulation, feature engineering, model training, and evaluation — fully self-contained with no dependency on the backend or frontend.
+The predictive core of CreatorDynamix. Handles synthetic data simulation, feature engineering, model training, and evaluation — fully self-contained with no dependency on the backend or frontend.
 
 ---
 

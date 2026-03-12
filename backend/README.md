@@ -6,7 +6,7 @@ REST API that serves the two-stage ML model predictions. Built with FastAPI.
 
 ## Status
 
-**Implemented (Phase 3 MVP).** Serving synthetic model artifacts. Ready for real data in Phase 4.
+**Implemented (Phase 3 MVP).** Serving synthetic model artifacts. Full prediction lifecycle persisted to SQLite. Ready for real data in Phase 4.
 
 ---
 
@@ -43,6 +43,7 @@ Both show all endpoints, request schemas, response schemas, and let you make liv
 ## Endpoints
 
 ### `GET /health`
+
 
 Returns load status of both models and the models directory path.
 
@@ -154,18 +155,73 @@ Takes the Stage-1 prior and first-hour engagement counts, then returns a correct
 
 ---
 
+### `PATCH /predictions/{id}/outcome`
+
+Record whether the post actually outperformed the creator's baseline at 24 hours. Closes the prediction lifecycle and records whether each stage's prediction was correct.
+
+```json
+{ "actual_survived": true }
+```
+
+Response:
+```json
+{
+  "prediction_id": 1,
+  "stage1_prob": 0.0378,
+  "stage2_prob": 0.9404,
+  "actual_survived": true,
+  "stage1_correct": false,
+  "stage2_correct": true
+}
+```
+
+---
+
+### `GET /predictions`
+
+List all prediction records, newest first. Supports query params:
+- `limit` — max records (default 50, max 500)
+- `account_id` — filter by creator
+- `has_outcome` — `true` = only rows with outcome recorded, `false` = only rows awaiting outcome
+
+---
+
 ## Code Structure
 
 ```
 backend/
-├── app.py          — FastAPI app, all routes, lifespan (model loading)
-├── predictor.py    — Model store, inference functions, feature computation
+├── app.py          — FastAPI app, all routes, lifespan (table creation + model loading)
+├── predictor.py    — ModelStore, inference functions, feature computation
 ├── schemas.py      — Pydantic request/response schemas
+├── database.py     — SQLAlchemy engine + session setup (SQLite → Postgres via env var)
+├── db_models.py    — Prediction table ORM definition
+├── data/           — SQLite database file lives here (git-ignored)
 ├── requirements.txt
 └── README.md
 ```
 
-**Design principle:** `app.py` handles HTTP concerns only. `predictor.py` handles all ML inference and feature engineering. `schemas.py` defines the contract. This keeps each file focused and independently testable.
+**Design principle:** each file has one job. `app.py` handles HTTP. `predictor.py` handles ML. `schemas.py` defines the API contract. `database.py` + `db_models.py` handle persistence. No file reaches into another's domain.
+
+## Database
+
+**Local development:** SQLite — no setup required. The database file is created automatically at `backend/data/predictions.db` on first startup.
+
+**Production:** set the `DATABASE_URL` environment variable to a Postgres connection string:
+```bash
+export DATABASE_URL="postgresql://user:password@host:5432/creatorDynamix"
+uvicorn app:app --port 8000
+```
+Everything else — the ORM models, queries, session management — works identically.
+
+The `Prediction` table tracks the full lifecycle of every prediction:
+
+```
+POST /predict/stage1  →  creates row  (stage1_prob, input features, timestamp)
+POST /predict/stage2  →  updates row  (stage2_prob, velocity features, correction)
+PATCH /predictions/{id}/outcome  →  updates row  (actual_survived, stage1_correct, stage2_correct)
+```
+
+Over time, rows with `actual_survived` filled in become the retraining dataset for Phase 4.
 
 ---
 

@@ -3,3 +3,4 @@ uvicorn[standard]
 lightgbm
 numpy
 pydantic
+sqlalchemy

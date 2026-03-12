@@ -82,6 +82,11 @@ class Stage1Request(BaseModel):
 
 
 class Stage1Response(BaseModel):
+    prediction_id: int = Field(
+        description="Unique ID for this prediction row in the database. "
+                    "Pass this as prediction_id in the /predict/stage2 request "
+                    "to link the two predictions together."
+    )
     survival_probability: float = Field(
         description="Predicted probability that this post will exceed the account's "
                     "rolling baseline reach within 24 hours. Range [0, 1]."
@@ -113,6 +118,15 @@ class Stage2Request(BaseModel):
     The backend uses the 1h model (AUC 0.978, trained with 4 features).
     93% of Stage-2's total lift is available at 1 hour — no need to wait 6h.
     """
+
+    # Link back to the Stage-1 prediction row in the database
+    prediction_id: int = Field(
+        ...,
+        description="The prediction_id returned by /predict/stage1. "
+                    "Links this correction to the original pre-post prediction "
+                    "so both are stored together in the database.",
+        example=1,
+    )
 
     # Stage-1 prior — the prediction to be revised
     stage1_prior: float = Field(
@@ -161,6 +175,10 @@ class Stage2Request(BaseModel):
 
 
 class Stage2Response(BaseModel):
+    prediction_id: int = Field(
+        description="The same prediction_id from the Stage-1 call. "
+                    "The database row has been updated with Stage-2 results."
+    )
     survival_probability: float = Field(
         description="Stage-2 corrected probability that this post will exceed "
                     "the account's baseline reach. Updated using 1h velocity."
@@ -185,6 +203,59 @@ class Stage2Response(BaseModel):
                     "Useful for debugging and frontend display."
     )
     model: str = Field(default="stage2_1h")
+
+
+# ---------------------------------------------------------------------------
+# Outcome recording  (called 24h after posting)
+# ---------------------------------------------------------------------------
+
+class OutcomeRequest(BaseModel):
+    """
+    Record what actually happened 24h after the post went live.
+
+    This is the ground truth that closes the prediction lifecycle.
+    Over time, the collection of (prediction, actual_outcome) pairs becomes
+    the retraining dataset for Phase 4.
+    """
+    actual_survived: bool = Field(
+        ...,
+        description="Did the post's 24h reach actually exceed the account's "
+                    "rolling_weighted_median baseline? True = outperformed.",
+        example=True,
+    )
+
+
+class OutcomeResponse(BaseModel):
+    prediction_id: int
+    stage1_prob: Optional[float]
+    stage2_prob: Optional[float]
+    actual_survived: bool
+    stage1_correct: Optional[bool] = Field(
+        description="Whether Stage-1's binary prediction matched the actual outcome."
+    )
+    stage2_correct: Optional[bool] = Field(
+        description="Whether Stage-2's binary prediction matched the actual outcome. "
+                    "Null if Stage-2 was never called for this prediction."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Prediction list  (GET /predictions)
+# ---------------------------------------------------------------------------
+
+class PredictionSummary(BaseModel):
+    prediction_id: int
+    account_id: Optional[str]
+    post_id: Optional[str]
+    stage1_prob: Optional[float]
+    stage1_survives: Optional[bool]
+    stage2_prob: Optional[float]
+    stage2_survives: Optional[bool]
+    stage2_correction: Optional[float]
+    actual_survived: Optional[bool]
+    stage1_called_at: Optional[str]
+    stage2_called_at: Optional[str]
+    outcome_recorded_at: Optional[str]
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-# CreatorDynamics
+# CreatorDynamix
 
 A predictive intelligence system for Instagram creators — estimates whether a Reel will outperform an account's recent baseline, and updates that prediction in real time as early engagement arrives.
 
@@ -6,7 +6,7 @@ A predictive intelligence system for Instagram creators — estimates whether a 
 
 ## What This Is
 
-Most creator analytics tools tell you what happened. CreatorDynamics tells you what's going to happen — before you post, and again within the first few hours after.
+Most creator analytics tools tell you what happened. CreatorDynamix tells you what's going to happen — before you post, and again within the first few hours after.
 
 The system is built in two prediction stages:
 
@@ -18,10 +18,10 @@ The system is built in two prediction stages:
 ## Project Structure
 
 ```
-creatorDynamics/
+creatorDynamics/          ← repo/folder name (unchanged)
 │
 ├── ml_engine/        — ML core: simulation, training, evaluation
-├── backend/          — API server (planned)
+├── backend/          — FastAPI REST API
 ├── frontend/         — Creator dashboard UI (planned)
 └── README.md
 ```
@@ -31,11 +31,11 @@ creatorDynamics/
 ## System Architecture
 
 ```
-ml_engine (Phase 1 ✓ · Phase 2 in progress)
+ml_engine  (Phase 1 ✓ · Phase 2 ✓ · Phase 2 deepening ✓)
       ↓
-backend  (REST API — serves predictions)
+backend    (REST API ✓ — serves predictions + persists lifecycle to SQLite)
       ↓
-frontend (Creator dashboard — displays predictions)
+frontend   (Creator dashboard — planned)
 ```
 
 Each layer is independently deployable. The ML engine has no dependency on the backend or frontend.
@@ -44,12 +44,13 @@ Each layer is independently deployable. The ML engine has no dependency on the b
 
 ## Current Status
 
-| Layer      | Status             | Description                                      |
-|------------|--------------------|--------------------------------------------------|
-| ml_engine  | Phase 1 complete   | Synthetic simulation + Stage-1 survival model    |
-| ml_engine  | Phase 2 in progress| Stage-2 velocity correction model               |
-| backend    | Not started        | FastAPI server to serve model predictions        |
-| frontend   | Not started        | React dashboard for creators                     |
+| Layer      | Status              | Description                                                   |
+|------------|---------------------|---------------------------------------------------------------|
+| ml_engine  | Phase 1 ✓           | Synthetic simulation + Stage-1 survival model (AUC 0.835)    |
+| ml_engine  | Phase 2 ✓           | Stage-2 velocity correction model (AUC 0.987, +0.152 lift)   |
+| ml_engine  | Phase 2 deepening ✓ | Calibration, walk-forward, observation windows, uncertainty   |
+| backend    | Phase 3 ✓           | FastAPI API + SQLite prediction persistence                   |
+| frontend   | Not started         | React dashboard for creators                                  |
 
 ---
 
@@ -65,11 +66,11 @@ Each sub-project has its own README with setup instructions:
 
 ## Tech Stack
 
-| Layer      | Technology                        |
-|------------|-----------------------------------|
-| ML engine  | Python 3.14, LightGBM, pandas, scikit-learn |
-| Backend    | Python / FastAPI (planned)        |
-| Frontend   | React / TypeScript (planned)      |
+| Layer      | Technology                                   |
+|------------|----------------------------------------------|
+| ML engine  | Python 3.14, LightGBM, pandas, scikit-learn  |
+| Backend    | Python, FastAPI, SQLAlchemy, SQLite           |
+| Frontend   | React / TypeScript (planned)                 |
 
 ---
 

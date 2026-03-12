@@ -1,6 +1,6 @@
 # Frontend
 
-Creator-facing dashboard for CreatorDynamics. Displays pre-post survival predictions, real-time post tracking, and account performance trends.
+Creator-facing dashboard for CreatorDynamix. Displays pre-post survival predictions, real-time post tracking, and account performance trends.
 
 ---
 
