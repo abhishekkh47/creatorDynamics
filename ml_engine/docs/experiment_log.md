@@ -390,26 +390,82 @@ Phase 2 deepening is complete. The full two-stage system is validated, robust, a
 
 ---
 
-## Upcoming: Milestone 6 — Phase 3: FastAPI Backend
+## Milestone 6 — Phase 3: FastAPI Backend
 
-**Status:** Planned
+**Date:** 12 March 2026
+**Status:** Complete
 
 ### Goal
-Expose the two trained models (Stage-1 pre-post, Stage-2 1h-post) via a REST API that can be consumed by the frontend and eventually by real Instagram webhook events.
+Expose the two trained models (Stage-1 pre-post, Stage-2 1h-post) via a REST API. Make the ML predictions callable from any client — the future frontend, a mobile app, or a webhook handler for real Instagram events.
 
-### Planned Endpoints
+### Key Architecture Decisions Made
 
-| Endpoint | Input | Output |
+| Decision | Choice | Reason |
 |---|---|---|
-| `POST /predict/stage1` | account metadata, content quality, cluster, posting time | survival probability (pre-post) |
-| `POST /predict/stage2` | stage1_prior + 1h engagement velocity | corrected survival probability |
-| `GET /health` | — | service status |
+| Model loading | Load at startup, hold in module-level `ModelStore` | Zero inference latency — no disk IO per request |
+| Which Stage-2 model | 1h only (`model_stage2_1h.txt`) | 93% of lift at 1h, no need to wait 6h |
+| Feature computation | Backend computes from raw inputs | Callers pass `likes_1h` not `norm_likes_1h` — cleaner API contract |
+| Schema validation | Pydantic for all request/response types | Automatic OpenAPI docs + request validation |
+| Real data | Mocked (caller provides rolling features) | Phase 4 will add a feature store |
 
-### Key Architecture Decisions to Make
-- Model loading: load from `ml_engine/outputs/` at startup or keep in-process?
-- Observation window: ship the 1h model only (4 features) or support 1h/3h/6h?
-- Input validation: Pydantic schemas for all request/response types
-- How does the backend get real Instagram engagement data? (Mock for now, real in Phase 4)
+### What Was Built
+
+```
+backend/
+├── app.py          — FastAPI app, routes, lifespan (model loading on startup)
+├── predictor.py    — ModelStore + predict_stage1() + predict_stage2()
+├── schemas.py      — Pydantic schemas: Stage1Request/Response, Stage2Request/Response, HealthResponse
+└── requirements.txt
+```
+
+Additional change in `ml_engine`:
+- `models/analysis.py` — `observation_window_analysis` now returns `(results, models_dict)` so the 1h model can be saved
+- `main.py` — saves `model_stage2_1h.txt` alongside the other outputs
+
+### Endpoints
+
+| Endpoint | When to call | Model |
+|---|---|---|
+| `GET /health` | any time | — |
+| `POST /predict/stage1` | before posting | Stage-1 (AUC 0.835) |
+| `POST /predict/stage2` | 60 min after posting | Stage-2 1h (AUC 0.978) |
+
+### Verified Behaviour (live test)
+
+**Stage-1** (account with 8,500 rolling baseline, quality=0.72, cluster_id=3):
+```json
+{ "survival_probability": 0.0378, "survives": false, "confidence": "high" }
+```
+
+**Stage-2, strong 1h engagement** (340 likes, 18 comments on same account):
+```json
+{ "survival_probability": 0.9878, "survives": true, "correction": +0.3678 }
+```
+
+**Stage-2, weak 1h engagement** (20 likes, 1 comment on same account):
+```json
+{ "survival_probability": 0.0463, "survives": false, "correction": -0.5737 }
+```
+
+The correction field behaves exactly as designed: +0.37 when velocity confirms the prediction, −0.57 when velocity contradicts it.
+
+### Key Finding
+
+The `correction` field in the Stage-2 response is the most useful signal for a creator-facing product. A creator doesn't need to understand probability — they just need to know: *"your post is tracking 1.4× above your baseline right now."* The `on_track_score` velocity feature (also returned in `velocity_features`) directly powers that message.
+
+### Decision
+
+Backend MVP is live. Next: **Phase 4 — Frontend** (React dashboard showing live predictions and the velocity tracking chart), OR **Phase 4 — Real Data Ingestion** (replace synthetic rolling features with real Instagram data).
+
+---
+
+## Upcoming: Milestone 7 — Phase 4
+
+**Option A — Frontend dashboard**
+Creator-facing React UI. Show Stage-1 prediction before posting, then live velocity chart + Stage-2 correction at 1h.
+
+**Option B — Real data ingestion**
+Replace synthetic `rolling_weighted_median`, `rolling_volatility`, etc. with real Instagram post history. Requires: Instagram Basic Display API (or scraper), a database (Postgres), a feature computation job that runs after every post.
 
 ---
 

@@ -204,16 +204,21 @@ def observation_window_analysis(
     s2_val: pd.DataFrame,
     s2_test: pd.DataFrame,
     stage1_test_auc: float,
-) -> dict:
+) -> tuple:
     """
     Train separate Stage-2 models at 1h, 3h, and 6h observation windows.
 
     Answers the product question: at what point after posting is the
     corrected prediction good enough to act on?
 
-    Includes Stage-1 AUC as the 0h baseline for comparison.
+    Returns
+    -------
+    results : dict  — AUC / lift per window (for reporting)
+    models  : dict  — trained LGBMClassifier per window label ("1h", "3h", "6h")
+                      The 1h model is saved as model_stage2_1h.txt for the API.
     """
     results = {"0h (Stage-1 only)": {"auc": round(stage1_test_auc, 4), "n_features": 0}}
+    models: dict = {}
 
     for label, feature_cols in [
         ("1h", VELOCITY_FEATURES_1H),
@@ -221,6 +226,8 @@ def observation_window_analysis(
         ("6h", VELOCITY_FEATURE_COLS),
     ]:
         model = _train_window_model(s2_train, s2_val, feature_cols)
+        models[label] = model
+
         probs = model.predict_proba(s2_test[feature_cols])[:, 1]
         auc = roc_auc_score(s2_test[LABEL_COL], probs)
         ll  = log_loss(s2_test[LABEL_COL], probs)
@@ -232,7 +239,7 @@ def observation_window_analysis(
             "n_features": len(feature_cols),
         }
 
-    return results
+    return results, models
 
 
 # ---------------------------------------------------------------------------

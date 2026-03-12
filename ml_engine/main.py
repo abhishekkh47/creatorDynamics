@@ -43,11 +43,12 @@ from synthetic.velocity_simulator import simulate_velocity
 OUTPUTS_DIR = Path(__file__).parent / "outputs"
 
 
-def _save_outputs(report: dict, model_s1, model_s2, df_raw, df) -> None:
+def _save_outputs(report: dict, model_s1, model_s2, model_s2_1h, df_raw, df) -> None:
     OUTPUTS_DIR.mkdir(exist_ok=True)
 
     model_s1.booster_.save_model(str(OUTPUTS_DIR / "model_stage1.txt"))
     model_s2.booster_.save_model(str(OUTPUTS_DIR / "model_stage2.txt"))
+    model_s2_1h.booster_.save_model(str(OUTPUTS_DIR / "model_stage2_1h.txt"))
 
     df_raw.to_csv(OUTPUTS_DIR / "simulation_data.csv", index=False)
 
@@ -67,7 +68,8 @@ def _save_outputs(report: dict, model_s1, model_s2, df_raw, df) -> None:
 
     print(f"\n  Saved to  {OUTPUTS_DIR}/")
     print(f"    model_stage1.txt     — Stage-1 pre-post model")
-    print(f"    model_stage2.txt     — Stage-2 velocity correction model")
+    print(f"    model_stage2.txt     — Stage-2 full 6h model")
+    print(f"    model_stage2_1h.txt  — Stage-2 1h model  (used by backend API)")
     print(f"    simulation_data.csv  — {report['simulation']['total_posts_raw']:,} raw posts")
     print(f"    feature_matrix.csv   — {report['simulation']['total_posts_after_pipeline']:,} posts with all features + velocity")
     print(f"    run_report.json      — full structured report")
@@ -173,7 +175,7 @@ def main() -> None:
     s2_segments    = segment_analysis(model_s2, test_s2,    feature_cols=VELOCITY_FEATURE_COLS)
     s2_thresholds  = threshold_analysis(model_s2, test_s2,  feature_cols=VELOCITY_FEATURE_COLS)
 
-    window_results = observation_window_analysis(
+    window_results, window_models = observation_window_analysis(
         s2_train, s2_val, test_s2,
         stage1_test_auc=s1_test_metrics["roc_auc"],
     )
@@ -254,7 +256,7 @@ def main() -> None:
         },
     }
 
-    _save_outputs(report, model_s1, model_s2, df_raw, df_vel)
+    _save_outputs(report, model_s1, model_s2, window_models["1h"], df_raw, df_vel)
 
     print("\nDone.\n")
 
