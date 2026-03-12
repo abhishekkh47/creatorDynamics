@@ -4,6 +4,7 @@
 
 ---
 
+## Phase 2 Deepening Status: COMPLETE ✓
 ## Phase 2 Status: COMPLETE ✓
 ## Phase 1 Status: COMPLETE ✓
 
@@ -175,4 +176,49 @@ Phase 1 is done. Phase 2 is done. The two-stage predictive architecture is valid
 - `stage1_prior` is the dominant Stage-2 feature, confirming Stage-2 is genuinely correcting the prior rather than ignoring it
 - Velocity rates (`like_velocity_3to6`, `like_velocity_1to3`) and `on_track_score` are the most informative velocity signals
 
-**Next: Phase 3 — Real Data Ingestion**
+**Next: Phase 2 Deepening — Done. See below.**
+
+---
+
+## Phase 2 Deepening Notes
+
+**What was added:**
+
+- `features/velocity_features.py` — added `VELOCITY_FEATURES_1H` and `VELOCITY_FEATURES_3H` subsets for observation-window analysis
+- `models/analysis.py` — all analysis functions now accept `feature_cols` parameter; added `observation_window_analysis`, `uncertainty_resolution_analysis`, `print_stage2_deep_analysis`
+- `models/walk_forward.py` — added `walk_forward_stage2`: retrains Stage-1 on each rolling window, applies fixed Stage-2, reports lift per window
+- `main.py` — expanded to 11-step pipeline; Steps 10–11 are Stage-2 deepening
+
+**What was validated:**
+
+| Analysis | Result |
+|---|---|
+| Stage-2 calibration (ECE) | 0.011 — well-calibrated |
+| Stage-2 segment AUC | Macro: 0.997, Nano: 0.981, Micro: 0.992 — lift is universal |
+| Stage-2 best-F1 threshold | 0.55 (precision: 0.972, recall: 0.915) |
+| Walk-forward lift | mean=+0.136, std=0.010, min=+0.120 — CONSISTENT ✓ |
+
+**Observation window analysis — key finding:**
+
+93% of Stage-2 lift is already available at 1 hour after posting.
+
+| Checkpoint | AUC | Lift vs Stage-1 |
+|---|---|---|
+| 0h (Stage-1 only) | 0.8354 | — |
+| 1h | 0.9778 | +0.142 |
+| 3h | 0.9871 | +0.152 |
+| 6h | 0.9874 | +0.152 |
+
+**Uncertainty resolution — key finding:**
+
+Stage-2 is most valuable for posts where Stage-1 was uncertain.
+
+| Stage-1 confidence | Posts | Stage-1 AUC | Stage-2 AUC | Lift |
+|---|---|---|---|---|
+| Uncertain (0.35–0.65) | 550 | 0.590 | 0.976 | +0.385 |
+| Moderate (0.25–0.35 or 0.65–0.75) | 438 | 0.665 | 0.972 | +0.307 |
+| Confident (<0.25 or >0.75) | 1,249 | 0.904 | 0.993 | +0.089 |
+
+This is exactly the desired architecture: Stage-2 acts as a genuine corrector, not a redundant classifier. It adds the most value precisely where Stage-1 is unsure.
+
+**Next: Phase 3 — Backend API (FastAPI)**

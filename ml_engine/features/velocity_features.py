@@ -1,18 +1,33 @@
 import numpy as np
 import pandas as pd
 
-# Stage-2 input feature set
+# Full Stage-2 feature set (all 6h data available)
 VELOCITY_FEATURE_COLS = [
-    # Stage-1 prior — the pre-post prediction being corrected
     "stage1_prior",
-    # Normalized cumulative likes (scaled by account baseline to be account-agnostic)
     "norm_likes_1h",
     "norm_likes_3h",
     "norm_likes_6h",
-    # Velocity rates: average likes/hour in each window
     "like_velocity_1to3",
     "like_velocity_3to6",
-    # Burst pattern: how front-loaded is engagement?
+    "burst_ratio",
+    "comment_ratio_1h",
+    "on_track_score",
+]
+
+# Observation-window subsets: features available at each checkpoint
+# Used by observation_window_analysis to show lift over time
+VELOCITY_FEATURES_1H = [
+    "stage1_prior",
+    "norm_likes_1h",
+    "comment_ratio_1h",
+    "on_track_score",
+]
+
+VELOCITY_FEATURES_3H = [
+    "stage1_prior",
+    "norm_likes_1h",
+    "norm_likes_3h",
+    "like_velocity_1to3",
     "burst_ratio",
     # Comment signal: high comment/like ratio = strong community engagement
     "comment_ratio_1h",

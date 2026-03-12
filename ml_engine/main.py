@@ -13,9 +13,12 @@ from features.feature_pipeline import FEATURE_COLS, LABEL_COL, build_feature_mat
 from features.velocity_features import build_velocity_features
 from models.analysis import (
     calibration_analysis,
+    observation_window_analysis,
     print_deep_analysis,
+    print_stage2_deep_analysis,
     segment_analysis,
     threshold_analysis,
+    uncertainty_resolution_analysis,
 )
 from models.evaluator import evaluate, print_diagnostics, print_feature_importance
 from models.stage1 import chronological_split, train_stage1
@@ -25,7 +28,12 @@ from models.stage2 import (
     print_stage2_feature_importance,
     train_stage2,
 )
-from models.walk_forward import summarise_walk_forward, walk_forward_validation
+from models.walk_forward import (
+    summarise_walk_forward,
+    summarise_walk_forward_stage2,
+    walk_forward_stage2,
+    walk_forward_validation,
+)
 from features.velocity_features import VELOCITY_FEATURE_COLS
 from synthetic.account import generate_accounts
 from synthetic.cluster import generate_clusters
@@ -76,25 +84,25 @@ def main() -> None:
     # Phase 1: Simulation + Feature Pipeline + Stage-1 Model
     # -------------------------------------------------------------------------
 
-    print(f"\n[1/9] Generating {N_ACCOUNTS} accounts...")
+    print(f"\n[1/11] Generating {N_ACCOUNTS} accounts...")
     accounts = generate_accounts(N_ACCOUNTS, N_CLUSTERS)
 
-    print(f"[2/9] Generating {N_CLUSTERS} topic clusters...")
+    print(f"[2/11] Generating {N_CLUSTERS} topic clusters...")
     clusters = generate_clusters(N_CLUSTERS)
     tier_counts = {}
     for c in clusters:
         tier_counts[c.tier] = tier_counts.get(c.tier, 0) + 1
     print(f"      Tiers: {tier_counts}")
 
-    print(f"[3/9] Running simulation over {SIMULATION_DAYS} days...")
+    print(f"[3/11] Running simulation over {SIMULATION_DAYS} days...")
     df_raw = run_simulation(accounts, clusters, SIMULATION_DAYS, seed=RANDOM_SEED)
     print(f"      Generated {len(df_raw):,} posts.")
 
-    print(f"[4/9] Building feature matrix  (λ={DECAY_LAMBDA})...")
+    print(f"[4/11] Building feature matrix  (λ={DECAY_LAMBDA})...")
     df = build_feature_matrix(df_raw)
     print_diagnostics(df)
 
-    print("\n[5/9] Training Stage-1 survival classifier...")
+    print("\n[5/11] Training Stage-1 survival classifier...")
     train_s1, val_s1, test_s1 = chronological_split(df)
     print(f"      Train: {len(train_s1):,}  |  Val: {len(val_s1):,}  |  Test: {len(test_s1):,}")
     model_s1 = train_stage1(train_s1, val_s1)
@@ -105,24 +113,24 @@ def main() -> None:
     s1_test_metrics = evaluate(model_s1, test_s1, "test")
     print_feature_importance(model_s1)
 
-    print("\n[6/9] Walk-forward validation  (90-day min train, 30-day windows)...")
+    print("\n[6/11] Stage-1 walk-forward validation  (90-day min train, 30-day windows)...")
     wf_results = walk_forward_validation(df, min_train_days=90, window_days=30)
     wf_summary = summarise_walk_forward(wf_results)
     stability = "STABLE ✓" if wf_summary.get("stable") else "UNSTABLE"
     print(f"      AUC  mean={wf_summary.get('auc_mean')}  std={wf_summary.get('auc_std')}  "
           f"min={wf_summary.get('auc_min')}  max={wf_summary.get('auc_max')}  →  {stability}")
 
-    print("\n[7/9] Deep analysis  (calibration · segments · thresholds)...")
-    calibration = calibration_analysis(model_s1, test_s1)
-    segments    = segment_analysis(model_s1, test_s1)
-    thresholds  = threshold_analysis(model_s1, test_s1)
-    print_deep_analysis(calibration, segments, thresholds)
+    print("\n[7/11] Stage-1 deep analysis  (calibration · segments · thresholds)...")
+    s1_calibration = calibration_analysis(model_s1, test_s1)
+    s1_segments    = segment_analysis(model_s1, test_s1)
+    s1_thresholds  = threshold_analysis(model_s1, test_s1)
+    print_deep_analysis(s1_calibration, s1_segments, s1_thresholds, label="Stage-1")
 
     # -------------------------------------------------------------------------
     # Phase 2: Velocity Simulation + Stage-2 Model
     # -------------------------------------------------------------------------
 
-    print("\n[8/9] Simulating early engagement velocity (1h · 3h · 6h)...")
+    print("\n[8/11] Simulating early engagement velocity (1h · 3h · 6h)...")
     df_vel = simulate_velocity(df, seed=RANDOM_SEED)
 
     # Re-split with velocity columns attached
@@ -142,7 +150,7 @@ def main() -> None:
     s2_val   = val_s2.iloc[n_s2_train:]
     print(f"      Stage-2  Train: {len(s2_train):,}  |  Val: {len(s2_val):,}  |  Test: {len(test_s2):,}")
 
-    print("\n[9/9] Training Stage-2 velocity correction model...")
+    print("\n[9/11] Training Stage-2 velocity correction model...")
     model_s2 = train_stage2(s2_train, s2_val)
 
     print("\n  Stage-2 Metrics")
@@ -154,6 +162,43 @@ def main() -> None:
     # Prior vs posterior on the test set
     test_s2_probs = model_s2.predict_proba(test_s2[VELOCITY_FEATURE_COLS])[:, 1]
     comparison = prior_vs_posterior_analysis(test_s1_probs, test_s2_probs, test_s2[LABEL_COL].to_numpy())
+
+    # -------------------------------------------------------------------------
+    # Phase 2 Deepening
+    # -------------------------------------------------------------------------
+
+    print("\n[10/11] Stage-2 deep analysis  (calibration · segments · thresholds · windows · uncertainty)...")
+
+    s2_calibration = calibration_analysis(model_s2, test_s2, feature_cols=VELOCITY_FEATURE_COLS)
+    s2_segments    = segment_analysis(model_s2, test_s2,    feature_cols=VELOCITY_FEATURE_COLS)
+    s2_thresholds  = threshold_analysis(model_s2, test_s2,  feature_cols=VELOCITY_FEATURE_COLS)
+
+    window_results = observation_window_analysis(
+        s2_train, s2_val, test_s2,
+        stage1_test_auc=s1_test_metrics["roc_auc"],
+    )
+
+    uncertainty_results = uncertainty_resolution_analysis(
+        test_s1_probs,
+        test_s2_probs,
+        test_s2[LABEL_COL].to_numpy(),
+    )
+
+    print_stage2_deep_analysis(
+        s2_calibration, s2_segments, s2_thresholds,
+        window_results, uncertainty_results,
+    )
+
+    print("\n[11/11] Stage-2 walk-forward validation  (full pipeline stability)...")
+    wf2_results = walk_forward_stage2(df_vel, model_s2, min_train_days=90, window_days=30)
+    wf2_summary = summarise_walk_forward_stage2(wf2_results)
+    consistent = "CONSISTENT ✓" if wf2_summary.get("lift_consistent") else "INCONSISTENT"
+    print(
+        f"      Stage-1 mean AUC: {wf2_summary.get('stage1_auc_mean')}  →  "
+        f"Stage-2 mean AUC: {wf2_summary.get('stage2_auc_mean')}\n"
+        f"      Lift  mean={wf2_summary.get('lift_mean')}  std={wf2_summary.get('lift_std')}  "
+        f"min={wf2_summary.get('lift_min')}  →  {consistent}"
+    )
 
     # -------------------------------------------------------------------------
     # Save everything
@@ -189,15 +234,23 @@ def main() -> None:
             "feature_importance": {k: int(v) for k, v in s1_importance.items()},
             "walk_forward": {"summary": wf_summary, "windows": wf_results},
             "deep_analysis": {
-                "calibration": calibration,
-                "segments": segments,
-                "thresholds": thresholds,
+                "calibration": s1_calibration,
+                "segments": s1_segments,
+                "thresholds": s1_thresholds,
             },
         },
         "stage2": {
             "metrics": {"val": s2_val_metrics, "test": s2_test_metrics},
             "feature_importance": {k: int(v) for k, v in s2_importance.items()},
             "prior_vs_posterior": comparison,
+            "walk_forward": {"summary": wf2_summary, "windows": wf2_results},
+            "deep_analysis": {
+                "calibration": s2_calibration,
+                "segments": s2_segments,
+                "thresholds": s2_thresholds,
+                "observation_windows": window_results,
+                "uncertainty_resolution": uncertainty_results,
+            },
         },
     }
 

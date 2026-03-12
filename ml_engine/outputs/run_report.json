@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-03-12T16:18:20.123938",
+  "run_at": "2026-03-12T16:32:08.649197",
   "config": {
     "random_seed": 42,
     "n_accounts": 200,
@@ -323,6 +323,315 @@
       "auc_lift": 0.1519,
       "corrections": 510,
       "regressions": 83
+    },
+    "walk_forward": {
+      "summary": {
+        "n_windows": 10,
+        "stage1_auc_mean": 0.8507,
+        "stage2_auc_mean": 0.987,
+        "lift_mean": 0.1364,
+        "lift_std": 0.0098,
+        "lift_min": 0.12,
+        "lift_consistent": true
+      },
+      "windows": [
+        {
+          "window_start": "2024-04-01",
+          "window_end": "2024-05-01",
+          "train_size": 3250,
+          "test_size": 1149,
+          "stage1_auc": 0.8555,
+          "stage2_auc": 0.9848,
+          "auc_lift": 0.1294
+        },
+        {
+          "window_start": "2024-05-01",
+          "window_end": "2024-05-31",
+          "train_size": 4399,
+          "test_size": 1098,
+          "stage1_auc": 0.8405,
+          "stage2_auc": 0.9855,
+          "auc_lift": 0.145
+        },
+        {
+          "window_start": "2024-05-31",
+          "window_end": "2024-06-30",
+          "train_size": 5497,
+          "test_size": 1124,
+          "stage1_auc": 0.864,
+          "stage2_auc": 0.9848,
+          "auc_lift": 0.1208
+        },
+        {
+          "window_start": "2024-06-30",
+          "window_end": "2024-07-30",
+          "train_size": 6621,
+          "test_size": 1202,
+          "stage1_auc": 0.8445,
+          "stage2_auc": 0.9793,
+          "auc_lift": 0.1348
+        },
+        {
+          "window_start": "2024-07-30",
+          "window_end": "2024-08-29",
+          "train_size": 7823,
+          "test_size": 1090,
+          "stage1_auc": 0.8426,
+          "stage2_auc": 0.9819,
+          "auc_lift": 0.1393
+        },
+        {
+          "window_start": "2024-08-29",
+          "window_end": "2024-09-28",
+          "train_size": 8913,
+          "test_size": 1096,
+          "stage1_auc": 0.8687,
+          "stage2_auc": 0.9886,
+          "auc_lift": 0.12
+        },
+        {
+          "window_start": "2024-09-28",
+          "window_end": "2024-10-28",
+          "train_size": 10009,
+          "test_size": 1187,
+          "stage1_auc": 0.8543,
+          "stage2_auc": 0.993,
+          "auc_lift": 0.1387
+        },
+        {
+          "window_start": "2024-10-28",
+          "window_end": "2024-11-27",
+          "train_size": 11196,
+          "test_size": 1063,
+          "stage1_auc": 0.8484,
+          "stage2_auc": 0.9931,
+          "auc_lift": 0.1447
+        },
+        {
+          "window_start": "2024-11-27",
+          "window_end": "2024-12-27",
+          "train_size": 12259,
+          "test_size": 1156,
+          "stage1_auc": 0.8518,
+          "stage2_auc": 0.9912,
+          "auc_lift": 0.1395
+        },
+        {
+          "window_start": "2024-12-27",
+          "window_end": "2025-01-26",
+          "train_size": 13415,
+          "test_size": 1152,
+          "stage1_auc": 0.8362,
+          "stage2_auc": 0.9875,
+          "auc_lift": 0.1514
+        }
+      ]
+    },
+    "deep_analysis": {
+      "calibration": {
+        "expected_calibration_error": 0.0111,
+        "interpretation": "well-calibrated",
+        "bins": [
+          {
+            "predicted_prob": 0.014,
+            "actual_survival_rate": 0.019,
+            "gap": 0.005
+          },
+          {
+            "predicted_prob": 0.151,
+            "actual_survival_rate": 0.143,
+            "gap": 0.008
+          },
+          {
+            "predicted_prob": 0.26,
+            "actual_survival_rate": 0.281,
+            "gap": 0.021
+          },
+          {
+            "predicted_prob": 0.331,
+            "actual_survival_rate": 0.438,
+            "gap": 0.106
+          },
+          {
+            "predicted_prob": 0.444,
+            "actual_survival_rate": 0.467,
+            "gap": 0.022
+          },
+          {
+            "predicted_prob": 0.534,
+            "actual_survival_rate": 0.368,
+            "gap": 0.166
+          },
+          {
+            "predicted_prob": 0.652,
+            "actual_survival_rate": 0.6,
+            "gap": 0.052
+          },
+          {
+            "predicted_prob": 0.751,
+            "actual_survival_rate": 0.455,
+            "gap": 0.296
+          },
+          {
+            "predicted_prob": 0.868,
+            "actual_survival_rate": 0.773,
+            "gap": 0.095
+          },
+          {
+            "predicted_prob": 0.992,
+            "actual_survival_rate": 0.988,
+            "gap": 0.004
+          }
+        ]
+      },
+      "segments": {
+        "account_size | micro (10k\u2013100k)": {
+          "n_posts": 995,
+          "survival_rate": 0.626,
+          "roc_auc": 0.9923
+        },
+        "account_size | nano (<10k)": {
+          "n_posts": 1182,
+          "survival_rate": 0.376,
+          "roc_auc": 0.9809
+        },
+        "account_size | macro (>100k)": {
+          "n_posts": 60,
+          "survival_rate": 0.733,
+          "roc_auc": 0.9972
+        },
+        "cluster_tier | weak": {
+          "n_posts": 933,
+          "survival_rate": 0.475,
+          "roc_auc": 0.9868
+        },
+        "cluster_tier | medium": {
+          "n_posts": 863,
+          "survival_rate": 0.492,
+          "roc_auc": 0.9902
+        },
+        "cluster_tier | strong": {
+          "n_posts": 441,
+          "survival_rate": 0.553,
+          "roc_auc": 0.9829
+        }
+      },
+      "thresholds": {
+        "by_threshold": [
+          {
+            "threshold": 0.3,
+            "precision": 0.93,
+            "recall": 0.948,
+            "f1": 0.939,
+            "predicted_positive_rate": 0.506
+          },
+          {
+            "threshold": 0.35,
+            "precision": 0.944,
+            "recall": 0.936,
+            "f1": 0.94,
+            "predicted_positive_rate": 0.493
+          },
+          {
+            "threshold": 0.4,
+            "precision": 0.945,
+            "recall": 0.935,
+            "f1": 0.94,
+            "predicted_positive_rate": 0.492
+          },
+          {
+            "threshold": 0.45,
+            "precision": 0.956,
+            "recall": 0.923,
+            "f1": 0.939,
+            "predicted_positive_rate": 0.48
+          },
+          {
+            "threshold": 0.5,
+            "precision": 0.965,
+            "recall": 0.916,
+            "f1": 0.94,
+            "predicted_positive_rate": 0.472
+          },
+          {
+            "threshold": 0.55,
+            "precision": 0.972,
+            "recall": 0.915,
+            "f1": 0.943,
+            "predicted_positive_rate": 0.468
+          },
+          {
+            "threshold": 0.6,
+            "precision": 0.976,
+            "recall": 0.91,
+            "f1": 0.942,
+            "predicted_positive_rate": 0.464
+          },
+          {
+            "threshold": 0.65,
+            "precision": 0.976,
+            "recall": 0.908,
+            "f1": 0.941,
+            "predicted_positive_rate": 0.463
+          },
+          {
+            "threshold": 0.7,
+            "precision": 0.978,
+            "recall": 0.907,
+            "f1": 0.941,
+            "predicted_positive_rate": 0.461
+          }
+        ],
+        "recommended": {
+          "max_f1": 0.55,
+          "max_precision": 0.7,
+          "max_recall": 0.3
+        }
+      },
+      "observation_windows": {
+        "0h (Stage-1 only)": {
+          "auc": 0.8354,
+          "n_features": 0
+        },
+        "1h": {
+          "auc": 0.9778,
+          "log_loss": 0.1894,
+          "auc_lift_vs_stage1": 0.1424,
+          "n_features": 4
+        },
+        "3h": {
+          "auc": 0.9871,
+          "log_loss": 0.1445,
+          "auc_lift_vs_stage1": 0.1517,
+          "n_features": 7
+        },
+        "6h": {
+          "auc": 0.9874,
+          "log_loss": 0.1392,
+          "auc_lift_vs_stage1": 0.152,
+          "n_features": 9
+        }
+      },
+      "uncertainty_resolution": {
+        "very_uncertain (S1 prob 0.35\u20130.65)": {
+          "n_posts": 550,
+          "stage1_auc": 0.5903,
+          "stage2_auc": 0.9755,
+          "lift": 0.3852
+        },
+        "moderate       (S1 prob 0.25\u20130.35 or 0.65\u20130.75)": {
+          "n_posts": 438,
+          "stage1_auc": 0.6645,
+          "stage2_auc": 0.9719,
+          "lift": 0.3074
+        },
+        "confident      (S1 prob <0.25 or >0.75)": {
+          "n_posts": 1249,
+          "stage1_auc": 0.9042,
+          "stage2_auc": 0.9933,
+          "lift": 0.0891
+        }
+      }
     }
   }
 }

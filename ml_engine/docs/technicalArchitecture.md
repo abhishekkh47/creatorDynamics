@@ -290,7 +290,7 @@ ml_engine/
 │   └── run_report.json
 │
 ├── config.py                   — All constants and hyperparameters
-├── main.py                     — 9-step orchestrator (Phase 1 + Phase 2)
+├── main.py                     — 11-step orchestrator (Phase 1 + Phase 2 + deepening)
 ├── requirements.txt
 └── README.md
 ```
@@ -316,4 +316,57 @@ np.random.default_rng(42)    # simulator-local RNG
 - Time-aware validation (chronological split + walk-forward)
 - Well-calibrated output probabilities (ECE = 0.020)
 - Modular architecture — each layer independently testable
-- Expandable to Phase 2 (Stage-2 velocity model)
+- Stage-2 analysis functions accept `feature_cols` parameter — reusable across stages
+
+---
+
+## 13. Observed Metrics — Phase 2 Deepening
+
+### Stage-2 Calibration
+
+ECE = 0.011 (well-calibrated). Stage-2 probability outputs are reliable confidence scores.
+
+### Stage-2 Per-Segment AUC
+
+| Segment | AUC |
+|---|---|
+| Macro (>100k) | 0.997 |
+| Micro (10k–100k) | 0.992 |
+| Nano (<10k) | 0.981 |
+| Cluster strong | 0.983 |
+| Cluster medium | 0.990 |
+| Cluster weak | 0.987 |
+
+The lift from Stage-1 is universal — no creator segment is left behind.
+
+### Observation Window AUC
+
+| Checkpoint | AUC | Lift vs Stage-1 |
+|---|---|---|
+| 0h (Stage-1 prior) | 0.835 | — |
+| 1h | 0.978 | +0.142 |
+| 3h | 0.987 | +0.152 |
+| 6h | 0.987 | +0.152 |
+
+**Key architectural implication:** 93% of Stage-2 lift is available within 1 hour of posting. A 1h-only deployment (4 features) is nearly as powerful as the full 6h model (9 features). This informs the backend API design: a creator notification can fire at 1h rather than waiting 6h.
+
+### Stage-2 Walk-Forward (Full Pipeline Stability)
+
+| Metric | Value |
+|---|---|
+| Stage-1 mean AUC across windows | 0.851 |
+| Stage-2 mean AUC across windows | 0.987 |
+| Mean lift | +0.136 |
+| Lift std | 0.010 |
+| Min lift (worst window) | +0.120 |
+| Consistent (always positive) | ✓ |
+
+### Uncertainty Resolution
+
+| Stage-1 confidence | Posts | S1 AUC | S2 AUC | Lift |
+|---|---|---|---|---|
+| Uncertain (prob 0.35–0.65) | 550 | 0.590 | 0.976 | +0.385 |
+| Moderate | 438 | 0.665 | 0.972 | +0.307 |
+| Confident (<0.25 or >0.75) | 1,249 | 0.904 | 0.993 | +0.089 |
+
+Stage-2 is a genuine corrector: highest lift precisely where Stage-1 is most uncertain.
