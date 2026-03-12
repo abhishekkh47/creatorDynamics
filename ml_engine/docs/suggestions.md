@@ -4,6 +4,7 @@
 
 ---
 
+## Phase 2 Status: COMPLETE ✓
 ## Phase 1 Status: COMPLETE ✓
 
 All Phase 1 checklist items have been validated. Results are in `outputs/run_report.json`.
@@ -155,4 +156,23 @@ You are not coding a toy. You are building:
 - A probabilistic survival system
 - A two-stage predictive architecture
 
-Phase 1 is done. The foundation is solid. Build Phase 2 on top of it.
+Phase 1 is done. Phase 2 is done. The two-stage predictive architecture is validated.
+
+---
+
+## Phase 2 Completion Notes
+
+**What was built:**
+
+- `synthetic/velocity_simulator.py` — simulates 1h/3h/6h engagement curves per post using exponential burst model driven by cluster tier and per-post noise
+- `features/velocity_features.py` — 9 velocity features, all normalized by `rolling_weighted_median` to be account-agnostic
+- `models/stage2.py` — Stage-2 LightGBM correction model + prior vs posterior analysis
+
+**What was validated:**
+
+- Stage-1 AUC: 0.835 → Stage-2 AUC: 0.987 (+0.152 lift)
+- Stage-2 corrected 510 Stage-1 errors (wrong → right) vs only 83 regressions (right → wrong)
+- `stage1_prior` is the dominant Stage-2 feature, confirming Stage-2 is genuinely correcting the prior rather than ignoring it
+- Velocity rates (`like_velocity_3to6`, `like_velocity_1to3`) and `on_track_score` are the most informative velocity signals
+
+**Next: Phase 3 — Real Data Ingestion**

@@ -30,3 +30,17 @@ WF_LGBM_PARAMS = {
     "verbose": -1,
     "random_state": RANDOM_SEED,
 }
+
+# Stage-2 velocity correction model
+STAGE2_LGBM_PARAMS = {
+    "objective": "binary",
+    "metric": "binary_logloss",
+    "num_leaves": 31,
+    "learning_rate": 0.05,
+    "n_estimators": 200,
+    "verbose": -1,
+    "random_state": RANDOM_SEED,
+}
+
+# Stage-2 data split: val set is split into Stage-2 train / Stage-2 val
+STAGE2_TRAIN_RATIO = 0.70  # fraction of Stage-1 val used for Stage-2 training

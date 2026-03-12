@@ -6,17 +6,19 @@
 ## 1. System Architecture
 
 ```
-Synthetic Engine
+Synthetic Engine  (accounts · clusters · posts · velocity)
       ↓
-Feature Pipeline
+Feature Pipeline  (baseline · account features · content features)
       ↓
-Stage-1 Survival Model
+Stage-1 Survival Model  (pre-post prediction)
       ↓
-Evaluation Module
+Evaluation  (walk-forward · calibration · segments · thresholds)
       ↓
-Walk-Forward Validation
+Velocity Simulation  (1h · 3h · 6h engagement curves)
       ↓
-Deep Analysis (Calibration · Segments · Thresholds)
+Stage-2 Velocity Correction Model  (posterior update)
+      ↓
+Prior vs Posterior Analysis
 ```
 
 ---
@@ -157,7 +159,45 @@ Roll forward in 30-day windows with minimum 90 days of training history. Each wi
 
 ---
 
-## 8. Observed Metrics (Phase 1)
+## 8. Phase 2: Velocity Simulation & Stage-2 Model
+
+### 8.1 Velocity Simulation
+
+For each post, early engagement at 1h, 3h, 6h is generated using a cumulative exponential model:
+
+```
+F(t) = 1 - exp(-λ × t)      where λ = burst_bias × 0.5
+```
+
+`burst_bias` is drawn per post from the cluster tier: strong clusters (0.6–0.9), medium (0.4–0.7), weak (0.2–0.5). Higher burst_bias = more front-loaded engagement. Per-observation lognormal noise is applied with decreasing sigma (0.25 → 0.18 → 0.12) as the sample stabilizes.
+
+### 8.2 Stage-2 Features
+
+| Feature | Description |
+|---|---|
+| `stage1_prior` | Stage-1 predicted survival probability |
+| `norm_likes_1h/3h/6h` | Cumulative likes normalized by `rolling_weighted_median` |
+| `like_velocity_1to3` | Average likes/hour from 1h to 3h, normalized |
+| `like_velocity_3to6` | Average likes/hour from 3h to 6h, normalized |
+| `burst_ratio` | `likes_1h / likes_3h` — how front-loaded is engagement |
+| `comment_ratio_1h` | `comments_1h / likes_1h` — community depth signal |
+| `on_track_score` | Implied 24h reach from 1h velocity vs. account baseline |
+
+### 8.3 Stage-2 Data Split
+
+Stage-2 is trained only on Stage-1 **out-of-sample** predictions to prevent the correction model from learning to trust an overfit prior:
+
+| Set | Source | Posts |
+|-----|--------|-------|
+| Stage-2 train | First 70% of Stage-1 val | ~1,565 |
+| Stage-2 val   | Last 30% of Stage-1 val  | ~671   |
+| Stage-2 test  | Stage-1 test set         | ~2,237 |
+
+---
+
+## 9. Observed Metrics (Phase 1 + Phase 2)
+
+**Stage-1 (pre-post, no velocity):**
 
 | Metric                  | Observed     | Notes                                   |
 |-------------------------|--------------|-----------------------------------------|
@@ -166,6 +206,17 @@ Roll forward in 30-day windows with minimum 90 days of training history. Each wi
 | Walk-forward AUC mean   | 0.851        | std=0.010 — temporally stable           |
 | Survival rate           | 0.501        | Target ~0.50 ✓                          |
 | ECE (calibration)       | 0.020        | Well-calibrated                         |
+
+**Stage-2 (post-live, with velocity):**
+
+| Metric                         | Observed | Notes |
+|--------------------------------|----------|-------|
+| ROC-AUC (test)                 | 0.987    | +0.152 AUC lift over Stage-1 |
+| Log loss (test)                | 0.139    | Large improvement from velocity signal |
+| Corrections (S1 wrong → S2 right) | 510   | Stage-2 catches Stage-1 errors |
+| Regressions (S1 right → S2 wrong) | 83    | Small regression cost |
+
+**Top Stage-2 features:** `stage1_prior` (dominant) → `norm_likes_6h` → velocity rates → `on_track_score`
 
 **Feature importance order (actual):**
 
@@ -214,28 +265,34 @@ For a high-precision internal tool: **threshold = 0.70** (precision = 0.834, rec
 ml_engine/
 │
 ├── synthetic/
-│   ├── account.py
-│   ├── cluster.py
-│   └── simulator.py
+│   ├── account.py              — Account dataclass + generator
+│   ├── cluster.py              — Cluster dataclass + generator
+│   ├── simulator.py            — Day-by-day simulation, reach computation
+│   └── velocity_simulator.py  — Early engagement at 1h/3h/6h  [Phase 2]
 │
 ├── features/
-│   ├── baseline.py
-│   └── feature_pipeline.py
+│   ├── baseline.py             — Rolling weighted median (no leakage)
+│   ├── feature_pipeline.py     — Stage-1 feature set (7 features)
+│   └── velocity_features.py   — Stage-2 velocity features (9 features)  [Phase 2]
 │
 ├── models/
-│   ├── stage1.py
-│   ├── evaluator.py
-│   ├── walk_forward.py       ← Phase 1 deepening
-│   └── analysis.py           ← Phase 1 deepening
+│   ├── stage1.py               — LightGBM Stage-1 training
+│   ├── stage2.py              — LightGBM Stage-2 training + comparison  [Phase 2]
+│   ├── evaluator.py            — Metrics, feature importance, diagnostics
+│   ├── walk_forward.py         — Rolling walk-forward validation
+│   └── analysis.py             — Calibration, segments, thresholds
 │
-├── outputs/
-│   ├── model.txt
+├── outputs/                    — Generated on each run (git-ignored)
+│   ├── model_stage1.txt
+│   ├── model_stage2.txt
 │   ├── simulation_data.csv
 │   ├── feature_matrix.csv
 │   └── run_report.json
 │
-├── config.py
-└── main.py
+├── config.py                   — All constants and hyperparameters
+├── main.py                     — 9-step orchestrator (Phase 1 + Phase 2)
+├── requirements.txt
+└── README.md
 ```
 
 ---
