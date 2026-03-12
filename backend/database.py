@@ -1,30 +1,21 @@
 """
-Database setup — SQLite (dev) with a clean path to Postgres (production).
+Database setup.
 
-To switch to Postgres, change DATABASE_URL to:
-    postgresql://user:password@host:5432/creatorDynamix
-
-Everything else stays the same — SQLAlchemy abstracts the driver.
+Reads DATABASE_URL from .env (via python-dotenv).
+SQLite for local testing, Postgres for production — swap is one line in .env.
 """
 
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-# ---------------------------------------------------------------------------
-# Connection
-# ---------------------------------------------------------------------------
+# Load .env from the backend directory
+load_dotenv(Path(__file__).parent / ".env")
 
-# SQLite file lives in backend/data/ — excluded from git via .gitignore
-_DATA_DIR = Path(__file__).parent / "data"
-_DATA_DIR.mkdir(exist_ok=True)
-
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    f"sqlite:///{_DATA_DIR / 'predictions.db'}",
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/predictions.db")
 
 # check_same_thread=False is SQLite-specific — safe for FastAPI's async handlers
 # when using synchronous sessions (which we do here)

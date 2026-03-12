@@ -6,7 +6,7 @@ REST API that serves the two-stage ML model predictions. Built with FastAPI.
 
 ## Status
 
-**Implemented (Phase 3 MVP).** Serving synthetic model artifacts. Full prediction lifecycle persisted to SQLite. Ready for real data in Phase 4.
+**Implemented (Phase 3 + Phase 4).** Serving synthetic model artifacts. Full real-data lifecycle — account registration, post ingestion, velocity updates, 24h reach closure — persisted to PostgreSQL. Schema migrations managed by Alembic.
 
 ---
 
@@ -17,6 +17,9 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# Apply database migrations (always run before first start or after pulling changes)
+alembic upgrade head
 
 uvicorn app:app --reload --port 8000
 ```
@@ -190,17 +193,68 @@ List all prediction records, newest first. Supports query params:
 
 ```
 backend/
-├── app.py          — FastAPI app, all routes, lifespan (table creation + model loading)
-├── predictor.py    — ModelStore, inference functions, feature computation
-├── schemas.py      — Pydantic request/response schemas
-├── database.py     — SQLAlchemy engine + session setup (SQLite → Postgres via env var)
-├── db_models.py    — Prediction table ORM definition
-├── data/           — SQLite database file lives here (git-ignored)
+├── app.py              — Entry point: lifespan, middleware, router registration only
+├── routers/
+│   ├── health.py       — GET  /health
+│   ├── accounts.py     — POST /accounts, GET /accounts/{id}
+│   ├── posts.py        — POST /accounts/{id}/posts, GET /posts/{id},
+│   │                     PATCH /posts/{id}/velocity, PATCH /posts/{id}/reach
+│   └── predictions.py  — POST /predict/stage1, POST /predict/stage2,
+│                         PATCH /predictions/{id}/outcome, GET /predictions
+├── predictor.py        — ModelStore, inference functions
+├── schemas.py          — Pydantic request/response schemas
+├── serializers.py      — ORM row → Pydantic response conversions
+├── utils.py            — Shared primitive helpers (utcnow, fmt)
+├── database.py         — SQLAlchemy engine + session setup (SQLite → Postgres via env var)
+├── db_models.py        — ORM models: Account, Post, FeatureStore, Prediction
+├── feature_engine.py   — Rolling feature computation from Post history
+├── migrations/         — Alembic migration files (version-controlled schema changes)
+│   ├── env.py          — Alembic runtime config (loads DATABASE_URL from .env)
+│   └── versions/       — One .py file per schema change
+├── alembic.ini         — Alembic configuration
+├── .env                — DATABASE_URL and secrets (git-ignored)
+├── .env.example        — Template for .env (committed)
+├── data/               — SQLite database file lives here (git-ignored)
 ├── requirements.txt
 └── README.md
 ```
 
-**Design principle:** each file has one job. `app.py` handles HTTP. `predictor.py` handles ML. `schemas.py` defines the API contract. `database.py` + `db_models.py` handle persistence. No file reaches into another's domain.
+**Design principles:**
+- `app.py` registers routers — it does nothing else
+- Each router owns one domain; adding a new domain means adding one file and one `include_router()` call
+- `serializers.py` is the only place that maps ORM rows to Pydantic shapes — no router builds responses by hand
+- `utils.py` has no app imports — safe to import from anywhere without circular risk
+
+---
+
+## Database Migrations
+
+Schema changes are managed by **Alembic**. Never edit the database manually. The workflow for every schema change is:
+
+1. **Edit `db_models.py`** — add/remove/rename a column or table in Python.
+2. **Autogenerate a migration:**
+   ```bash
+   alembic revision --autogenerate -m "describe_what_changed"
+   ```
+   Alembic connects to the DB, compares it against your models, and generates a versioned migration file in `migrations/versions/`.
+3. **Review the generated file** — always inspect it before applying. Autogenerate is ~95% correct but occasionally misses renames or index changes.
+4. **Apply it:**
+   ```bash
+   alembic upgrade head
+   ```
+5. **Commit both** the model change and the migration file together in one git commit.
+
+**Rolling back:**
+```bash
+alembic downgrade -1    # roll back one step
+alembic downgrade base  # roll all the way back to empty DB
+```
+
+**Checking current state:**
+```bash
+alembic current         # which revision is the DB on?
+alembic history         # full migration history
+```
 
 ## Database
 
@@ -249,6 +303,20 @@ The Stage-2 model corrects the Stage-1 prior most aggressively when Stage-1 was 
 
 ---
 
-## Phase 4 — Real Data
+## Real-Data Flow (Phase 4 — Complete)
 
-In Phase 4, the rolling features (`rolling_weighted_median`, `rolling_volatility`, etc.) will be computed from real Instagram post history stored in a database, and Stage-2 inputs will come from real engagement data via the Instagram API or webhooks. The prediction endpoints will remain unchanged — only the data sources change.
+The full real-data lifecycle is implemented and live:
+
+```
+POST /accounts                       — register creator
+POST /accounts/{id}/posts (history)  — ingest past posts with known reach_24h
+                                       → feature store auto-computed after each
+POST /accounts/{id}/posts (new)      — new Reel goes live
+                                       → Stage-1 prediction fires automatically
+PATCH /posts/{id}/velocity           — T+1h: record likes_1h, comments_1h
+                                       → Stage-2 prediction fires automatically
+PATCH /posts/{id}/reach              — T+24h: record final reach
+                                       → outcome recorded, feature store updated
+```
+
+Rolling features (`rolling_weighted_median`, `rolling_volatility`, etc.) are computed from real post history stored in the database. The next step is connecting Stage-2 input to real Instagram engagement data via the Instagram API or webhooks.

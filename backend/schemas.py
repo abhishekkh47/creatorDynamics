@@ -1,228 +1,227 @@
 """
 Pydantic request/response schemas for all API endpoints.
-
-Design principle: the API accepts the minimum raw inputs needed and computes
-derived features internally. Callers should not need to know what
-`norm_likes_1h` means — they just pass `likes_1h` and the backend normalizes.
 """
 
+from datetime import datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# Stage-1  (pre-post prediction)
+# Account
 # ---------------------------------------------------------------------------
 
-class Stage1Request(BaseModel):
-    """
-    Features available before a post goes live.
-
-    The rolling features (rolling_weighted_median, rolling_volatility,
-    posting_frequency, cluster_entropy) are computed from the account's
-    post history. In production these come from a feature store that is
-    updated after every post.
-    """
-
-    # Account-level rolling features (from post history)
-    rolling_weighted_median: float = Field(
-        ..., gt=0,
-        description="Account's exponentially-weighted median reach over recent posts. "
-                    "Acts as the personal baseline — survival is defined as reach > this value.",
-        example=8500.0,
+class AccountCreate(BaseModel):
+    username: str = Field(..., description="Instagram username (unique).", example="john_creates")
+    instagram_id: Optional[str] = Field(
+        None, description="Instagram numeric account ID. Optional — fill in when available.",
+        example="17841400008460056",
     )
-    rolling_volatility: float = Field(
-        ..., ge=0,
-        description="Standard deviation of the account's recent log-reach. "
-                    "Higher = more unpredictable account.",
-        example=1200.0,
-    )
-    posting_frequency: float = Field(
-        ..., ge=0,
-        description="Number of posts the account made in the past 14 days.",
-        example=5.0,
-    )
-    cluster_entropy: float = Field(
-        ..., ge=0,
-        description="Shannon entropy of the account's topic cluster distribution "
-                    "over recent posts. High entropy = diverse content.",
-        example=1.8,
-    )
-
-    # Post-level features
-    content_quality: float = Field(
-        ..., ge=0.0, le=1.0,
-        description="Content quality score [0–1]. Estimated from production signals "
-                    "(e.g. hook strength, caption length, hashtag relevance).",
-        example=0.72,
-    )
-    cluster_id: int = Field(
-        ..., ge=0,
-        description="Topic cluster ID for this post (0–19 for the 20-cluster model).",
-        example=3,
-    )
-    hour_of_day: Optional[int] = Field(
-        None, ge=0, le=23,
-        description="Hour of posting in local time (0–23). Used to derive the "
-                    "posting time bucket (night/morning/afternoon/evening). "
-                    "If omitted, defaults to morning bucket.",
-        example=14,
-    )
-
-    model_config = {"json_schema_extra": {"example": {
-        "rolling_weighted_median": 8500.0,
-        "rolling_volatility": 1200.0,
-        "posting_frequency": 5.0,
-        "cluster_entropy": 1.8,
-        "content_quality": 0.72,
-        "cluster_id": 3,
-        "hour_of_day": 14,
-    }}}
-
-
-class Stage1Response(BaseModel):
-    prediction_id: int = Field(
-        description="Unique ID for this prediction row in the database. "
-                    "Pass this as prediction_id in the /predict/stage2 request "
-                    "to link the two predictions together."
-    )
-    survival_probability: float = Field(
-        description="Predicted probability that this post will exceed the account's "
-                    "rolling baseline reach within 24 hours. Range [0, 1]."
-    )
-    survives: bool = Field(
-        description="Binary prediction at the recommended threshold (0.35). "
-                    "True = model predicts the post will outperform baseline."
-    )
-    confidence: Literal["high", "medium", "low"] = Field(
-        description="Confidence in the prediction. "
-                    "High = probability far from threshold (≥0.25 away). "
-                    "Low = probability near threshold (<0.10 away)."
-    )
-    posting_time_bucket: int = Field(
-        description="Derived time bucket used as input: 0=night, 1=morning, "
-                    "2=afternoon, 3=evening."
-    )
-    model: str = Field(default="stage1")
-
-
-# ---------------------------------------------------------------------------
-# Stage-2  (1h-post prediction)
-# ---------------------------------------------------------------------------
-
-class Stage2Request(BaseModel):
-    """
-    Stage-1 prior + first-hour engagement data.
-
-    The backend uses the 1h model (AUC 0.978, trained with 4 features).
-    93% of Stage-2's total lift is available at 1 hour — no need to wait 6h.
-    """
-
-    # Link back to the Stage-1 prediction row in the database
-    prediction_id: int = Field(
-        ...,
-        description="The prediction_id returned by /predict/stage1. "
-                    "Links this correction to the original pre-post prediction "
-                    "so both are stored together in the database.",
-        example=1,
-    )
-
-    # Stage-1 prior — the prediction to be revised
-    stage1_prior: float = Field(
-        ..., ge=0.0, le=1.0,
-        description="Stage-1 survival probability from /predict/stage1. "
-                    "This is the prior that Stage-2 will update.",
-        example=0.62,
-    )
-
-    # Account baseline (needed to normalize velocity signals)
-    rolling_weighted_median: float = Field(
-        ..., gt=0,
-        description="Same value used in the Stage-1 call. "
-                    "Required to normalize raw engagement counts.",
-        example=8500.0,
-    )
-
-    # 1h engagement counts (raw, not normalized — backend handles normalization)
-    likes_1h: int = Field(
-        ..., ge=0,
-        description="Total likes received in the first hour after posting.",
-        example=340,
-    )
-    comments_1h: int = Field(
-        ..., ge=0,
-        description="Total comments received in the first hour after posting.",
-        example=18,
-    )
-
-    # Cluster tier — used to estimate expected burst fraction
+    follower_count: int = Field(..., gt=0, description="Current follower count.", example=45000)
     cluster_tier: Literal["strong", "medium", "weak"] = Field(
-        ...,
-        description="Performance tier of the post's topic cluster. "
-                    "Used to estimate how front-loaded engagement should be "
-                    "(strong clusters burst faster in the first hour).",
-        example="medium",
+        "medium",
+        description="Performance tier of this account's primary niche. "
+                    "Drives the burst expectation in Stage-2 prediction.",
     )
 
     model_config = {"json_schema_extra": {"example": {
-        "stage1_prior": 0.62,
-        "rolling_weighted_median": 8500.0,
-        "likes_1h": 340,
-        "comments_1h": 18,
+        "username": "john_creates",
+        "follower_count": 45000,
         "cluster_tier": "medium",
     }}}
 
 
-class Stage2Response(BaseModel):
-    prediction_id: int = Field(
-        description="The same prediction_id from the Stage-1 call. "
-                    "The database row has been updated with Stage-2 results."
+class AccountResponse(BaseModel):
+    id: int
+    username: str
+    instagram_id: Optional[str]
+    follower_count: int
+    cluster_tier: str
+    created_at: str
+    features: Optional[dict] = Field(
+        None,
+        description="Current rolling features from the feature store. "
+                    "Null if fewer than 2 posts with known 24h reach exist.",
     )
-    survival_probability: float = Field(
-        description="Stage-2 corrected probability that this post will exceed "
-                    "the account's baseline reach. Updated using 1h velocity."
+    post_count: int = Field(
+        0, description="Total posts ingested for this account."
     )
-    survives: bool = Field(
-        description="Binary prediction at the recommended threshold (0.55). "
-                    "Higher threshold than Stage-1 because Stage-2 precision is much higher."
-    )
-    stage1_prior: float = Field(
-        description="The Stage-1 prior that was revised."
-    )
-    correction: float = Field(
-        description="stage2_probability − stage1_prior. "
-                    "Positive = velocity evidence revised prediction upward. "
-                    "Negative = early engagement is weaker than expected."
-    )
-    confidence: Literal["high", "medium", "low"] = Field(
-        description="Confidence in the corrected prediction."
-    )
-    velocity_features: dict = Field(
-        description="The normalized velocity features computed from raw inputs. "
-                    "Useful for debugging and frontend display."
-    )
-    model: str = Field(default="stage2_1h")
 
 
 # ---------------------------------------------------------------------------
-# Outcome recording  (called 24h after posting)
+# Post ingestion
+# ---------------------------------------------------------------------------
+
+class PostIngest(BaseModel):
+    """
+    Data available at posting time. Stage-1 prediction fires automatically
+    if the account's feature store has been populated.
+    """
+    instagram_post_id: Optional[str] = Field(
+        None, description="Instagram post ID. Optional — fill in when available."
+    )
+    posted_at: datetime = Field(
+        ..., description="Timestamp when the post went live (ISO 8601 with timezone).",
+        example="2026-03-12T14:30:00+05:30",
+    )
+    content_quality: float = Field(
+        ..., ge=0.0, le=1.0,
+        description="Content quality score [0–1]. Estimated from hook strength, "
+                    "caption quality, hashtag relevance, etc.",
+        example=0.75,
+    )
+    cluster_id: int = Field(
+        ..., ge=0,
+        description="Topic cluster ID for this post (0–19).",
+        example=4,
+    )
+
+    model_config = {"json_schema_extra": {"example": {
+        "posted_at": "2026-03-12T14:30:00+05:30",
+        "content_quality": 0.75,
+        "cluster_id": 4,
+    }}}
+
+
+class PostResponse(BaseModel):
+    id: int
+    account_id: int
+    instagram_post_id: Optional[str]
+    posted_at: str
+    content_quality: Optional[float]
+    cluster_id: Optional[int]
+    reach_24h: Optional[int]
+    likes_1h: Optional[int]
+    comments_1h: Optional[int]
+    created_at: str
+    prediction: Optional["PredictionSummary"] = Field(
+        None, description="Linked prediction. Populated at ingest (Stage-1) "
+                          "and updated at 1h velocity update (Stage-2)."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Velocity update  (T+1h)
+# ---------------------------------------------------------------------------
+
+class VelocityUpdate(BaseModel):
+    """First-hour engagement counts. Triggers Stage-2 auto-prediction."""
+    likes_1h: int = Field(..., ge=0, example=280)
+    comments_1h: int = Field(..., ge=0, example=14)
+
+    model_config = {"json_schema_extra": {"example": {"likes_1h": 280, "comments_1h": 14}}}
+
+
+# ---------------------------------------------------------------------------
+# Reach update  (T+24h)
+# ---------------------------------------------------------------------------
+
+class ReachUpdate(BaseModel):
+    """
+    24h reach. Closes the prediction lifecycle and triggers feature store
+    recomputation so the account's next prediction uses fresh baselines.
+    """
+    reach_24h: int = Field(..., gt=0, example=12000)
+    likes_24h: Optional[int] = Field(None, ge=0, example=890)
+    comments_24h: Optional[int] = Field(None, ge=0, example=45)
+
+    model_config = {"json_schema_extra": {"example": {
+        "reach_24h": 12000, "likes_24h": 890, "comments_24h": 45,
+    }}}
+
+
+class ReachUpdateResponse(BaseModel):
+    post_id: int
+    reach_24h: int
+    actual_survived: bool = Field(
+        description="Did the post beat the account's rolling baseline?"
+    )
+    rolling_weighted_median_at_time: Optional[float] = Field(
+        description="The baseline that was active when this post was predicted."
+    )
+    stage1_correct: Optional[bool]
+    stage2_correct: Optional[bool]
+    feature_store_updated: bool = Field(
+        description="True if the feature store was successfully recomputed "
+                    "with this post included."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Prediction summary  (embedded in PostResponse + list endpoints)
+# ---------------------------------------------------------------------------
+
+class PredictionSummary(BaseModel):
+    prediction_id: int
+    account_id: Optional[int]
+    post_id: Optional[int]
+    stage1_prob: Optional[float]
+    stage1_survives: Optional[bool]
+    stage2_prob: Optional[float]
+    stage2_survives: Optional[bool]
+    stage2_correction: Optional[float]
+    actual_survived: Optional[bool]
+    stage1_correct: Optional[bool]
+    stage2_correct: Optional[bool]
+    velocity_features: Optional[dict] = None
+    stage1_called_at: Optional[str]
+    stage2_called_at: Optional[str]
+    outcome_recorded_at: Optional[str]
+
+
+PostResponse.model_rebuild()
+
+
+# ---------------------------------------------------------------------------
+# Manual prediction endpoints  (backward-compatible — no DB required)
+# ---------------------------------------------------------------------------
+
+class Stage1Request(BaseModel):
+    rolling_weighted_median: float = Field(..., gt=0, example=8500.0)
+    rolling_volatility: float = Field(..., ge=0, example=1200.0)
+    posting_frequency: float = Field(..., ge=0, example=5.0)
+    cluster_entropy: float = Field(..., ge=0, example=1.8)
+    content_quality: float = Field(..., ge=0.0, le=1.0, example=0.72)
+    cluster_id: int = Field(..., ge=0, example=3)
+    hour_of_day: Optional[int] = Field(None, ge=0, le=23, example=14)
+
+
+class Stage1Response(BaseModel):
+    prediction_id: int
+    survival_probability: float
+    survives: bool
+    confidence: Literal["high", "medium", "low"]
+    posting_time_bucket: int
+    model: str = "stage1"
+
+
+class Stage2Request(BaseModel):
+    prediction_id: int = Field(..., example=1)
+    stage1_prior: float = Field(..., ge=0.0, le=1.0, example=0.62)
+    rolling_weighted_median: float = Field(..., gt=0, example=8500.0)
+    likes_1h: int = Field(..., ge=0, example=340)
+    comments_1h: int = Field(..., ge=0, example=18)
+    cluster_tier: Literal["strong", "medium", "weak"] = Field(..., example="medium")
+
+
+class Stage2Response(BaseModel):
+    prediction_id: int
+    survival_probability: float
+    survives: bool
+    stage1_prior: float
+    correction: float
+    confidence: Literal["high", "medium", "low"]
+    velocity_features: dict
+    model: str = "stage2_1h"
+
+
+# ---------------------------------------------------------------------------
+# Outcome recording  (manual, for predictions not linked to a real Post)
 # ---------------------------------------------------------------------------
 
 class OutcomeRequest(BaseModel):
-    """
-    Record what actually happened 24h after the post went live.
-
-    This is the ground truth that closes the prediction lifecycle.
-    Over time, the collection of (prediction, actual_outcome) pairs becomes
-    the retraining dataset for Phase 4.
-    """
-    actual_survived: bool = Field(
-        ...,
-        description="Did the post's 24h reach actually exceed the account's "
-                    "rolling_weighted_median baseline? True = outperformed.",
-        example=True,
-    )
+    actual_survived: bool = Field(..., example=True)
 
 
 class OutcomeResponse(BaseModel):
@@ -230,32 +229,8 @@ class OutcomeResponse(BaseModel):
     stage1_prob: Optional[float]
     stage2_prob: Optional[float]
     actual_survived: bool
-    stage1_correct: Optional[bool] = Field(
-        description="Whether Stage-1's binary prediction matched the actual outcome."
-    )
-    stage2_correct: Optional[bool] = Field(
-        description="Whether Stage-2's binary prediction matched the actual outcome. "
-                    "Null if Stage-2 was never called for this prediction."
-    )
-
-
-# ---------------------------------------------------------------------------
-# Prediction list  (GET /predictions)
-# ---------------------------------------------------------------------------
-
-class PredictionSummary(BaseModel):
-    prediction_id: int
-    account_id: Optional[str]
-    post_id: Optional[str]
-    stage1_prob: Optional[float]
-    stage1_survives: Optional[bool]
-    stage2_prob: Optional[float]
-    stage2_survives: Optional[bool]
-    stage2_correction: Optional[float]
-    actual_survived: Optional[bool]
-    stage1_called_at: Optional[str]
-    stage2_called_at: Optional[str]
-    outcome_recorded_at: Optional[str]
+    stage1_correct: Optional[bool]
+    stage2_correct: Optional[bool]
 
 
 # ---------------------------------------------------------------------------
@@ -263,12 +238,6 @@ class PredictionSummary(BaseModel):
 # ---------------------------------------------------------------------------
 
 class HealthResponse(BaseModel):
-    status: Literal["ok", "degraded"] = Field(
-        description="'ok' if all models are loaded. 'degraded' if any model failed to load."
-    )
-    models: dict = Field(
-        description="Per-model load status."
-    )
-    models_dir: str = Field(
-        description="Absolute path to the directory where model files are loaded from."
-    )
+    status: Literal["ok", "degraded"]
+    models: dict
+    models_dir: str

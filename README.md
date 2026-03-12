@@ -46,10 +46,11 @@ Each layer is independently deployable. The ML engine has no dependency on the b
 
 | Layer      | Status              | Description                                                   |
 |------------|---------------------|---------------------------------------------------------------|
-| ml_engine  | Phase 1 ✓           | Synthetic simulation + Stage-1 survival model (AUC 0.835)    |
-| ml_engine  | Phase 2 ✓           | Stage-2 velocity correction model (AUC 0.987, +0.152 lift)   |
+| ml_engine  | Phase 1 ✓           | Synthetic simulation + Stage-1 survival model (AUC 0.835)     |
+| ml_engine  | Phase 2 ✓           | Stage-2 velocity correction model (AUC 0.987, +0.152 lift)    |
 | ml_engine  | Phase 2 deepening ✓ | Calibration, walk-forward, observation windows, uncertainty   |
-| backend    | Phase 3 ✓           | FastAPI API + SQLite prediction persistence                   |
+| backend    | Phase 3 ✓           | FastAPI API, modular routers, Alembic schema migrations       |
+| backend    | Phase 4 ✓           | Real-data lifecycle — accounts, posts, feature store, Postgres|
 | frontend   | Not started         | React dashboard for creators                                  |
 
 ---
@@ -66,11 +67,11 @@ Each sub-project has its own README with setup instructions:
 
 ## Tech Stack
 
-| Layer      | Technology                                   |
-|------------|----------------------------------------------|
-| ML engine  | Python 3.14, LightGBM, pandas, scikit-learn  |
-| Backend    | Python, FastAPI, SQLAlchemy, SQLite           |
-| Frontend   | React / TypeScript (planned)                 |
+| Layer      | Technology                                     |
+|------------|------------------------------------------------|
+| ML engine  | Python 3.14, LightGBM, pandas, scikit-learn    |
+| Backend    | Python, FastAPI, SQLAlchemy, PostgreSQL/SQLite |
+| Frontend   | React / TypeScript (planned)                   |
 
 ---
 

@@ -10,8 +10,10 @@ build/
 # ML engine generated outputs (reproduce by running main.py)
 ml_engine/outputs/
 
-# Backend database (local SQLite — not committed, Postgres in production)
+# Backend database and secrets
 backend/data/
+backend/.env
+backend/migrations/versions/__pycache__/
 
 # Environment
 .env
