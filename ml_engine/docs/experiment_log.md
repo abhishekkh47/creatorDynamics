@@ -459,13 +459,83 @@ Backend MVP is live. Next: **Phase 4 — Frontend** (React dashboard showing liv
 
 ---
 
-## Upcoming: Milestone 7 — Phase 4
+## Milestone 7 — Phase 4: Real Data Ingestion + Backend Hardening
 
-**Option A — Frontend dashboard**
-Creator-facing React UI. Show Stage-1 prediction before posting, then live velocity chart + Stage-2 correction at 1h.
+**Date:** 12 March 2026
+**Status:** Complete
 
-**Option B — Real data ingestion**
-Replace synthetic `rolling_weighted_median`, `rolling_volatility`, etc. with real Instagram post history. Requires: Instagram Basic Display API (or scraper), a database (Postgres), a feature computation job that runs after every post.
+### Goal
+Replace synthetic rolling features with a real-data lifecycle: register creators, ingest post history, automatically compute features, fire predictions at the right moments, and persist everything to Postgres for future retraining.
+
+### What Was Built
+
+**Database layer:**
+- `db_models.py` — four ORM tables: `Account`, `Post`, `FeatureStore`, `Prediction`
+- `database.py` — SQLAlchemy engine, session management, env-var-driven connection string
+- `migrations/` — Alembic set up for version-controlled schema evolution; initial migration applied
+
+**Feature computation:**
+- `feature_engine.py` — ports rolling weighted median, volatility, posting frequency, cluster entropy from `ml_engine/features/` to operate on database records instead of a pandas DataFrame. Called after every `PATCH /posts/{id}/reach`.
+
+**Real-data lifecycle:**
+```
+POST /accounts                       ← register creator
+POST /accounts/{id}/posts (history)  ← ingest past posts → feature store auto-computed
+POST /accounts/{id}/posts (new)      ← new post → Stage-1 fires automatically
+PATCH /posts/{id}/velocity           ← T+1h engagement → Stage-2 fires automatically
+PATCH /posts/{id}/reach              ← T+24h reach → outcome recorded, feature store updated
+```
+
+**Backend modularisation:**
+- `routers/` — routes split into `health.py`, `accounts.py`, `posts.py`, `predictions.py`
+- `serializers.py` — ORM → Pydantic conversion in one place
+- `utils.py` — primitive helpers (`utcnow`, `fmt`), no circular import risk
+- `app.py` reduced to 55 lines (entry point + router registration only)
+
+### Key Architecture Decisions
+
+| Decision | Choice | Reason |
+|---|---|---|
+| Schema migrations | Alembic (autogenerate) | Safe ALTER TABLE; git-trackable; rollback support |
+| Feature computation | On `PATCH /reach` (synchronous) | Simple, correct; async job queue is Phase 5+ |
+| Rolling features | Port from ml_engine, not re-import | Backend must not depend on ml_engine at runtime |
+| DB for dev / prod | SQLite / Postgres via `DATABASE_URL` env var | Zero config locally; production-ready with one env change |
+| App structure | `routers/` package per domain | New domains = one new file + one `include_router()` call |
+
+### Verified Behaviour (live test against Postgres at 192.168.1.100)
+
+1. Account registered (`id=1`)
+2. 10 historical posts ingested with known reach → feature store computed (`rolling_weighted_median`, etc.)
+3. New post ingested → Stage-1 prediction fired automatically (`survival_probability: 0.0358`)
+4. 1h velocity update (`likes_1h=350, comments_1h=18`) → Stage-2 fired automatically (`survival_probability: 0.9404, correction: +0.9046`)
+5. 24h reach update → outcome recorded (`actual_survived: true, stage2_correct: true`), feature store recomputed
+
+### Key Finding
+
+The rolling feature logic ported cleanly from the synthetic DataFrame world to the database world. The two architectures are intentionally aligned: `feature_engine.py` mirrors `ml_engine/features/feature_pipeline.py` so features computed from real data will be distribution-compatible with features the model was trained on.
+
+The prediction lifecycle is fully automated — no manual intervention required between post going live and outcome being recorded.
+
+### Decision
+
+Phase 4 is complete. Next: **Phase 5 — Frontend Dashboard** (React UI for creators).
+
+---
+
+## Upcoming: Milestone 8 — Phase 5: Frontend Dashboard
+
+Creator-facing React UI. Three views:
+
+**1. Pre-post view**
+Input the post details (content quality, cluster, time) → Show Stage-1 survival probability with confidence badge.
+
+**2. Live view (T+1h)**
+After posting, input 1h engagement → Show Stage-2 probability + velocity chart ("tracking 1.4× above your baseline").
+
+**3. History view**
+Table of past predictions with outcomes. Filter by account, date, result. Shows cumulative model accuracy for that creator.
+
+**Tech:** React + TypeScript, Vite, calls the existing backend API directly. No new backend routes required for the basic version.
 
 ---
 
