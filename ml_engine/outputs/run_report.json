@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-03-12T15:27:50.282928",
+  "run_at": "2026-03-12T15:55:08.117017",
   "config": {
     "random_seed": 42,
     "n_accounts": 200,
@@ -15,7 +15,7 @@
     "corr_cluster_reach": 0.0129,
     "corr_reach_survived": 0.0717
   },
-  "metrics": {
+  "stage1_metrics": {
     "val": {
       "split": "val",
       "roc_auc": 0.854787276224104,
@@ -35,5 +35,260 @@
     "cluster_id": 324,
     "posting_frequency": 65,
     "posting_time_bucket": 28
+  },
+  "walk_forward": {
+    "summary": {
+      "n_windows": 10,
+      "auc_mean": 0.8507,
+      "auc_std": 0.0098,
+      "auc_min": 0.8362,
+      "auc_max": 0.8687,
+      "log_loss_mean": 0.4794,
+      "stable": true
+    },
+    "windows": [
+      {
+        "window_start": "2024-04-01",
+        "window_end": "2024-05-01",
+        "train_size": 3250,
+        "test_size": 1149,
+        "roc_auc": 0.8555,
+        "log_loss": 0.472
+      },
+      {
+        "window_start": "2024-05-01",
+        "window_end": "2024-05-31",
+        "train_size": 4399,
+        "test_size": 1098,
+        "roc_auc": 0.8405,
+        "log_loss": 0.4943
+      },
+      {
+        "window_start": "2024-05-31",
+        "window_end": "2024-06-30",
+        "train_size": 5497,
+        "test_size": 1124,
+        "roc_auc": 0.864,
+        "log_loss": 0.4612
+      },
+      {
+        "window_start": "2024-06-30",
+        "window_end": "2024-07-30",
+        "train_size": 6621,
+        "test_size": 1202,
+        "roc_auc": 0.8445,
+        "log_loss": 0.4894
+      },
+      {
+        "window_start": "2024-07-30",
+        "window_end": "2024-08-29",
+        "train_size": 7823,
+        "test_size": 1090,
+        "roc_auc": 0.8426,
+        "log_loss": 0.4903
+      },
+      {
+        "window_start": "2024-08-29",
+        "window_end": "2024-09-28",
+        "train_size": 8913,
+        "test_size": 1096,
+        "roc_auc": 0.8687,
+        "log_loss": 0.4539
+      },
+      {
+        "window_start": "2024-09-28",
+        "window_end": "2024-10-28",
+        "train_size": 10009,
+        "test_size": 1187,
+        "roc_auc": 0.8543,
+        "log_loss": 0.4781
+      },
+      {
+        "window_start": "2024-10-28",
+        "window_end": "2024-11-27",
+        "train_size": 11196,
+        "test_size": 1063,
+        "roc_auc": 0.8484,
+        "log_loss": 0.4798
+      },
+      {
+        "window_start": "2024-11-27",
+        "window_end": "2024-12-27",
+        "train_size": 12259,
+        "test_size": 1156,
+        "roc_auc": 0.8518,
+        "log_loss": 0.4768
+      },
+      {
+        "window_start": "2024-12-27",
+        "window_end": "2025-01-26",
+        "train_size": 13415,
+        "test_size": 1152,
+        "roc_auc": 0.8362,
+        "log_loss": 0.4982
+      }
+    ]
+  },
+  "deep_analysis": {
+    "calibration": {
+      "expected_calibration_error": 0.0202,
+      "interpretation": "well-calibrated",
+      "bins": [
+        {
+          "predicted_prob": 0.055,
+          "actual_survival_rate": 0.061,
+          "gap": 0.007
+        },
+        {
+          "predicted_prob": 0.147,
+          "actual_survival_rate": 0.159,
+          "gap": 0.012
+        },
+        {
+          "predicted_prob": 0.249,
+          "actual_survival_rate": 0.301,
+          "gap": 0.051
+        },
+        {
+          "predicted_prob": 0.351,
+          "actual_survival_rate": 0.381,
+          "gap": 0.03
+        },
+        {
+          "predicted_prob": 0.451,
+          "actual_survival_rate": 0.489,
+          "gap": 0.039
+        },
+        {
+          "predicted_prob": 0.549,
+          "actual_survival_rate": 0.557,
+          "gap": 0.009
+        },
+        {
+          "predicted_prob": 0.656,
+          "actual_survival_rate": 0.62,
+          "gap": 0.036
+        },
+        {
+          "predicted_prob": 0.749,
+          "actual_survival_rate": 0.754,
+          "gap": 0.005
+        },
+        {
+          "predicted_prob": 0.853,
+          "actual_survival_rate": 0.844,
+          "gap": 0.008
+        },
+        {
+          "predicted_prob": 0.935,
+          "actual_survival_rate": 0.912,
+          "gap": 0.023
+        }
+      ]
+    },
+    "segments": {
+      "account_size | micro (10k\u2013100k)": {
+        "n_posts": 995,
+        "survival_rate": 0.626,
+        "roc_auc": 0.7993
+      },
+      "account_size | nano (<10k)": {
+        "n_posts": 1182,
+        "survival_rate": 0.376,
+        "roc_auc": 0.834
+      },
+      "account_size | macro (>100k)": {
+        "n_posts": 60,
+        "survival_rate": 0.733,
+        "roc_auc": 0.875
+      },
+      "cluster_tier | weak": {
+        "n_posts": 933,
+        "survival_rate": 0.475,
+        "roc_auc": 0.843
+      },
+      "cluster_tier | medium": {
+        "n_posts": 863,
+        "survival_rate": 0.492,
+        "roc_auc": 0.8358
+      },
+      "cluster_tier | strong": {
+        "n_posts": 441,
+        "survival_rate": 0.553,
+        "roc_auc": 0.82
+      }
+    },
+    "thresholds": {
+      "by_threshold": [
+        {
+          "threshold": 0.3,
+          "precision": 0.672,
+          "recall": 0.895,
+          "f1": 0.767,
+          "predicted_positive_rate": 0.662
+        },
+        {
+          "threshold": 0.35,
+          "precision": 0.689,
+          "recall": 0.868,
+          "f1": 0.768,
+          "predicted_positive_rate": 0.626
+        },
+        {
+          "threshold": 0.4,
+          "precision": 0.711,
+          "recall": 0.835,
+          "f1": 0.768,
+          "predicted_positive_rate": 0.583
+        },
+        {
+          "threshold": 0.45,
+          "precision": 0.728,
+          "recall": 0.793,
+          "f1": 0.759,
+          "predicted_positive_rate": 0.541
+        },
+        {
+          "threshold": 0.5,
+          "precision": 0.748,
+          "recall": 0.753,
+          "f1": 0.75,
+          "predicted_positive_rate": 0.5
+        },
+        {
+          "threshold": 0.55,
+          "precision": 0.771,
+          "recall": 0.71,
+          "f1": 0.739,
+          "predicted_positive_rate": 0.458
+        },
+        {
+          "threshold": 0.6,
+          "precision": 0.785,
+          "recall": 0.661,
+          "f1": 0.718,
+          "predicted_positive_rate": 0.418
+        },
+        {
+          "threshold": 0.65,
+          "precision": 0.804,
+          "recall": 0.614,
+          "f1": 0.696,
+          "predicted_positive_rate": 0.38
+        },
+        {
+          "threshold": 0.7,
+          "precision": 0.834,
+          "recall": 0.542,
+          "f1": 0.657,
+          "predicted_positive_rate": 0.323
+        }
+      ],
+      "recommended": {
+        "max_f1": 0.35,
+        "max_precision": 0.7,
+        "max_recall": 0.3
+      }
+    }
   }
 }

@@ -19,3 +19,14 @@ LGBM_PARAMS = {
     "verbose": -1,
     "random_state": RANDOM_SEED,
 }
+
+# Lighter params for walk-forward (trains one model per time window)
+WF_LGBM_PARAMS = {
+    "objective": "binary",
+    "metric": "binary_logloss",
+    "num_leaves": 31,
+    "learning_rate": 0.05,
+    "n_estimators": 100,
+    "verbose": -1,
+    "random_state": RANDOM_SEED,
+}
