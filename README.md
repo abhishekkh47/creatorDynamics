@@ -51,7 +51,7 @@ Each layer is independently deployable. The ML engine has no dependency on the b
 | ml_engine  | Phase 2 deepening ✓ | Calibration, walk-forward, observation windows, uncertainty   |
 | backend    | Phase 3 ✓           | FastAPI API, modular routers, Alembic schema migrations       |
 | backend    | Phase 4 ✓           | Real-data lifecycle — accounts, posts, feature store, Postgres|
-| frontend   | Not started         | React dashboard for creators                                  |
+| frontend   | Phase 5 ✓           | React dashboard — Pre-Post, Live Tracker, History views       |
 
 ---
 
