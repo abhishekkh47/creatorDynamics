@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import type { ContentScoreResponse, NicheOption, Stage1Request, Stage1Response } from '@/types/api'
+import type { ContentScoreResponse, NicheDetectResponse, NicheOption, Stage1Request, Stage1Response } from '@/types/api'
 import { confidenceColor } from '@/lib/utils'
 import { POSTING_FREQ_OPTIONS, TIER_LABELS } from '@/lib/constants'
 import { saveStage1Context } from '@/lib/storage'
@@ -73,11 +73,12 @@ export default function PrePost() {
   const [timeStr, setTimeStr]       = useState('14:00')
 
   // Content analyzer
-  const [caption,      setCaption]      = useState('')
-  const [hashtags,     setHashtags]     = useState('')
-  const [scoreResult,  setScoreResult]  = useState<ContentScoreResponse | null>(null)
-  const [scoring,      setScoring]      = useState(false)
-  const [scoreError,   setScoreError]   = useState<string | null>(null)
+  const [caption,       setCaption]       = useState('')
+  const [hashtags,      setHashtags]      = useState('')
+  const [scoreResult,   setScoreResult]   = useState<ContentScoreResponse | null>(null)
+  const [detectedNiche, setDetectedNiche] = useState<NicheDetectResponse | null>(null)
+  const [scoring,       setScoring]       = useState(false)
+  const [scoreError,    setScoreError]    = useState<string | null>(null)
 
   // Advanced panel — null means "not yet opened / synced"
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -93,8 +94,16 @@ export default function PrePost() {
     setScoring(true)
     setScoreError(null)
     try {
-      const res = await api.scoreContent({ caption, hashtags })
-      setScoreResult(res)
+      // Run both in parallel — one button, two results
+      const [scoreRes, nicheRes] = await Promise.all([
+        api.scoreContent({ caption, hashtags }),
+        api.detectNiche({ caption, hashtags }),
+      ])
+      setScoreResult(scoreRes)
+      setDetectedNiche(nicheRes)
+      // Auto-select the detected niche but don't lock it — user can still change
+      const found = niches.find(n => n.cluster_id === nicheRes.cluster_id)
+      if (found) setNiche(found)
     } catch (err) {
       setScoreError(String(err))
     } finally {
@@ -179,12 +188,86 @@ export default function PrePost() {
         <Card>
           <form onSubmit={submit} className="space-y-5">
 
-            {/* Section A: Account */}
-            <SectionHeader>Your Account</SectionHeader>
+            {/* ── Section 1: This Post ───────────────────────────────── */}
+            <SectionHeader>This Post</SectionHeader>
 
-            {/* Niche */}
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-gray-300">Your niche</label>
+            <div>
+              <label className="block text-sm font-medium text-gray-300">Caption</label>
+              <p className="text-xs text-gray-500 mt-0.5">Paste your Reel caption</p>
+              <textarea
+                value={caption}
+                onChange={e => {
+                  setCaption(e.target.value)
+                  setScoreResult(null)
+                  setDetectedNiche(null)
+                }}
+                rows={4}
+                placeholder="Your caption text here…"
+                className={inputCls + ' resize-none mt-1'}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300">Hashtags</label>
+              <p className="text-xs text-gray-500 mt-0.5">Optional — separate with spaces or commas</p>
+              <input
+                type="text"
+                value={hashtags}
+                onChange={e => {
+                  setHashtags(e.target.value)
+                  setScoreResult(null)
+                  setDetectedNiche(null)
+                }}
+                placeholder="#fitness #workout #health"
+                className={inputCls + ' mt-1'}
+              />
+            </div>
+
+            {/* Analyze button */}
+            <button
+              type="button"
+              disabled={!caption.trim() || scoring}
+              onClick={analyzeContent}
+              className="flex items-center gap-2 rounded-lg border border-brand-600/50 bg-brand-900/20 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-900/40 disabled:opacity-40 transition-colors"
+            >
+              {scoring ? <Spinner size="sm" /> : '✦'}
+              {scoring ? 'Analyzing content & detecting niche…' : 'Analyze Post'}
+            </button>
+
+            {scoreError && (
+              <p className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-2">{scoreError}</p>
+            )}
+
+            {/* Content quality score card */}
+            {scoreResult && <ContentScoreCard score={scoreResult} />}
+
+            {!scoreResult && !scoring && (
+              <p className="text-xs text-gray-600 italic">
+                {caption.trim()
+                  ? 'Click Analyze to score quality and auto-detect your niche.'
+                  : "Paste your caption above and we'll handle the rest."}
+              </p>
+            )}
+
+            {/* ── Section 2: Niche (auto-detected, still editable) ───── */}
+            <div className="border-t border-gray-800 pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <SectionHeader>Content Niche</SectionHeader>
+                {detectedNiche && niche?.cluster_id === detectedNiche.cluster_id && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-brand-900/40 border border-brand-700/40 px-2 py-0.5 text-xs text-brand-300">
+                    ✦ Auto-detected · {Math.round(detectedNiche.confidence * 100)}% confident
+                  </span>
+                )}
+              </div>
+
+              {detectedNiche && (
+                <p className="text-xs text-gray-500 mb-2 italic">
+                  {detectedNiche.reasoning}
+                  {' '}
+                  <span className="text-gray-600">Not right? Pick from the list below.</span>
+                </p>
+              )}
+
               {nichesError ? (
                 <p className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-2">
                   Could not load niches: {nichesError}
@@ -195,7 +278,13 @@ export default function PrePost() {
                   disabled={nichesLoading}
                   onChange={e => {
                     const found = niches.find(n => n.cluster_id === Number(e.target.value))
-                    if (found) setNiche(found)
+                    if (found) {
+                      setNiche(found)
+                      // Clear auto-detect badge if user manually changes
+                      if (detectedNiche && found.cluster_id !== detectedNiche.cluster_id) {
+                        setDetectedNiche(null)
+                      }
+                    }
                   }}
                   className={inputCls + (nichesLoading ? ' opacity-50' : '')}
                 >
@@ -212,7 +301,11 @@ export default function PrePost() {
               )}
             </div>
 
-            {/* Typical reach */}
+            {/* ── Section 3: Your Account ────────────────────────────── */}
+            <div className="border-t border-gray-800 pt-4">
+              <SectionHeader>Your Account</SectionHeader>
+            </div>
+
             <SimpleField label="Typical reach per Reel" hint="Your average views on recent posts">
               <input
                 type="number"
@@ -225,7 +318,6 @@ export default function PrePost() {
               />
             </SimpleField>
 
-            {/* Posting frequency */}
             <div className="space-y-1">
               <label className="block text-sm font-medium text-gray-300">How often do you post?</label>
               <select
@@ -239,65 +331,11 @@ export default function PrePost() {
               </select>
             </div>
 
-            {/* Section B: This post */}
+            {/* ── Section 4: Posting time ────────────────────────────── */}
             <div className="border-t border-gray-800 pt-4">
-              <SectionHeader>This Post</SectionHeader>
+              <SectionHeader>Posting Time</SectionHeader>
             </div>
 
-            {/* Content analyzer */}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Caption</label>
-                <p className="text-xs text-gray-500 mt-0.5">Paste your Reel caption</p>
-                <textarea
-                  value={caption}
-                  onChange={e => { setCaption(e.target.value); setScoreResult(null) }}
-                  rows={4}
-                  placeholder="Your caption text here…"
-                  className={inputCls + ' resize-none mt-1'}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Hashtags</label>
-                <p className="text-xs text-gray-500 mt-0.5">Optional — separate with spaces or commas</p>
-                <input
-                  type="text"
-                  value={hashtags}
-                  onChange={e => { setHashtags(e.target.value); setScoreResult(null) }}
-                  placeholder="#fitness #workout #health"
-                  className={inputCls + ' mt-1'}
-                />
-              </div>
-
-              <button
-                type="button"
-                disabled={!caption.trim() || scoring}
-                onClick={analyzeContent}
-                className="flex items-center gap-2 rounded-lg border border-brand-600/50 bg-brand-900/20 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-900/40 disabled:opacity-40 transition-colors"
-              >
-                {scoring ? <Spinner size="sm" /> : '✦'}
-                {scoring ? 'Analyzing…' : 'Analyze Content Quality'}
-              </button>
-
-              {scoreError && (
-                <p className="text-xs text-red-400">{scoreError}</p>
-              )}
-
-              {scoreResult && (
-                <ContentScoreCard score={scoreResult} />
-              )}
-
-              {!scoreResult && !scoring && (
-                <p className="text-xs text-gray-600 italic">
-                  {caption.trim()
-                    ? 'Click Analyze to score this post.'
-                    : 'Paste your caption above — we\'ll score the quality automatically.'}
-                </p>
-              )}
-            </div>
-
-            {/* Post time */}
             <SimpleField label="What time will you post?" hint="Your local time">
               <input
                 type="time"

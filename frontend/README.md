@@ -6,7 +6,7 @@ Creator-facing prediction dashboard. Built with React + TypeScript + Vite.
 
 ## Status
 
-**Implemented (Phase 5 MVP).** Three views wired to the live backend API.
+**Current (Phase 5 — UX rebuild complete).** All three views rebuilt for real end users. No raw ML parameters are exposed. AI-assisted content scoring and niche detection integrated via the backend provider system.
 
 ---
 
@@ -28,23 +28,51 @@ All `/api/*` requests are proxied to `http://localhost:8000` via the Vite dev se
 
 ## Views
 
-### Pre-Post (`/`)
-Enter account history features before a Reel goes live.
-- Calls `POST /predict/stage1`
-- Shows survival probability, confidence badge, and decision context
-- Returns a `prediction_id` to carry forward to the Live Tracker
+### Pre-Post Predict (`/`)
 
-### Live Tracker (`/tracker`)
-Enter first-hour engagement ~60 minutes after posting.
-- Calls `POST /predict/stage2`
-- Shows updated probability, velocity correction, and on-track gauge (1.4× = tracking 40% above baseline)
-- 93% of Stage-2's total lift is available at this checkpoint
+The main prediction form. Designed for non-technical creators — no ML vocabulary exposed.
+
+**User fills in:**
+1. **Caption** — paste the Reel caption
+2. **Hashtags** — optional, separate with spaces or commas
+3. Click **Analyze Post** → fires two API calls in parallel:
+   - `POST /meta/score-content` — AI scores content quality (0–1)
+   - `POST /meta/detect-niche` — AI detects the content niche and auto-selects the dropdown
+4. **Niche dropdown** — auto-selected from detection, still fully editable; shows confidence badge
+5. **Typical reach per Reel** — account's average views (maps to `rolling_weighted_median`)
+6. **How often do you post?** — dropdown (maps to `posting_frequency`)
+7. **What time will you post?** — time picker (maps to `hour_of_day`)
+8. Click **Predict Survival** → calls `POST /predict/stage1`
+
+**Result:** survival probability, confidence, and a saved `prediction_id` stored to `localStorage` for the 1h Check-in.
+
+**Advanced toggle:** reveals all 7 raw ML fields pre-filled from the inputs above. Any field can be overridden — used by technical users or when testing with known values.
+
+---
+
+### 1h Check-in (`/tracker`)
+
+Called ~60 minutes after posting.
+
+**Auto-loaded from `localStorage`:** prediction ID, Stage-1 prior, rolling weighted median, cluster tier — set when the Pre-Post prediction was made. The user sees a context banner confirming which prediction is being updated.
+
+**User fills in (only two fields):**
+1. **Likes** — current like count at ~60 min
+2. **Comments** — current comment count at ~60 min
+
+Calls `POST /predict/stage2` → shows updated probability, velocity correction, and on-track gauge (1.4× = tracking 40% above baseline).
+
+**Advanced toggle:** reveals all 4 Stage-2 input fields (prediction ID, prior, median, cluster tier) pre-filled from the stored context, editable as overrides.
+
+---
 
 ### History (`/history`)
+
 All past predictions with outcomes.
+
 - Calls `GET /predictions`
 - Shows Stage-1 → Stage-2 probability bars and corrections per row
-- Record outcomes inline (Survived / Didn't survive buttons)
+- Record outcomes inline (Survived / Didn't survive)
 - Displays aggregate Stage-1 and Stage-2 accuracy at the top
 
 ---
@@ -54,21 +82,23 @@ All past predictions with outcomes.
 ```
 frontend/
 ├── src/
-│   ├── App.tsx               — BrowserRouter + route definitions
+│   ├── App.tsx               — BrowserRouter + routes (catch-all redirects to /)
 │   ├── main.tsx              — React entry point
 │   ├── index.css             — Tailwind base styles
 │   ├── types/
-│   │   └── api.ts            — TypeScript types mirroring backend schemas
+│   │   └── api.ts            — TypeScript types mirroring all backend schemas
 │   ├── lib/
 │   │   ├── api.ts            — Typed fetch wrappers for all backend endpoints
-│   │   └── utils.ts          — pct(), fmt(), color helpers
+│   │   ├── constants.ts      — POSTING_FREQ_OPTIONS, TIER_LABELS (static UI helpers only)
+│   │   ├── storage.ts        — localStorage helpers for Stage-1 context persistence
+│   │   └── utils.ts          — pct(), fmt(), confidenceColor(), correctionLabel()
 │   ├── components/
 │   │   ├── NavBar.tsx        — Sticky top nav with active route highlighting
 │   │   ├── ProbabilityMeter.tsx — Animated probability bar + percentage
 │   │   └── ui/               — Card, Badge, Spinner
 │   └── pages/
-│       ├── PrePost.tsx       — Stage-1 prediction form + result
-│       ├── LiveTracker.tsx   — Stage-2 velocity form + on-track gauge
+│       ├── PrePost.tsx       — Stage-1 form: caption → AI analyze → predict
+│       ├── LiveTracker.tsx   — Stage-2 form: auto-loaded context + 1h engagement
 │       └── History.tsx       — Predictions table + outcome recording
 ├── vite.config.ts            — Vite config + /api proxy to backend
 ├── tailwind.config.js
@@ -76,45 +106,47 @@ frontend/
 └── package.json
 ```
 
+**Key design rules:**
+- `lib/constants.ts` holds only static UI helpers (dropdown labels, tier display strings). Niche cluster data is fetched from `GET /meta/niches` at runtime — never hardcoded here.
+- `lib/storage.ts` persists Stage-1 context to `localStorage` so the 1h Check-in page can auto-load it without the user typing anything.
+- `types/api.ts` is the single source of truth for all API shapes — no inline type definitions in components.
+- The Advanced toggle is always available but hidden by default. It opens pre-filled with auto-computed values. When closed, the simple inputs drive the ML request. When open, the raw field values are used verbatim.
+
 ---
 
-## Why the Current Forms Are Wrong — UX Rebuild Plan
+## AI Integration (frontend side)
 
-The current Pre-Post and Live Tracker pages expose raw ML feature inputs directly to the end user. **This is a developer test harness, not a product.** No real creator knows what "rolling weighted median reach" or "cluster entropy" means.
+The frontend has no knowledge of whether OpenAI is active or not — it calls the same two endpoints regardless:
 
-### What the forms currently ask vs. what they should ask
+| Endpoint | What it returns |
+|---|---|
+| `POST /meta/score-content` | `quality_score` (0–1), grade, per-signal breakdown, improvement tips |
+| `POST /meta/detect-niche` | `cluster_id`, `confidence`, `reasoning` sentence |
 
-| Parameter shown today | What it actually is | How it should be sourced in v2 |
-|---|---|---|
-| **Rolling weighted median reach** | Exponentially-weighted median of the account's last ~20 posts' reach | Computed automatically by `feature_engine.py` from post history stored in the DB. Exposed via `GET /accounts/{id}`. |
-| **Rolling volatility** | Std deviation of log-reach across recent posts | Same — auto-computed alongside the median. |
-| **Posting frequency** | Number of posts in the last 14 days | Count of rows in the `Post` table for this account. |
-| **Cluster entropy** | Shannon entropy of which topics the account posts about | Computed from per-post topic distribution stored in the `FeatureStore`. |
-| **Cluster ID** | Which of the 20 topic clusters this post belongs to | Inferred from caption/hashtags at post creation time using the topic model. |
-| **Cluster tier** | Whether this niche historically performs well (strong/medium/weak) | Precomputed lookup by cluster — set during account onboarding, invisible to user. |
-| **Content quality** | 0–1 score for hook, caption, hashtag quality | Map from a simple 1–5 star rating the user gives before posting. |
-| **Hour of day** | Posting hour | Read from the post timestamp — or ask "what time will you post?" with a time-picker. |
-| **Prediction ID / Stage-1 prior** | Internal ML state passed between stages | Returned by the backend on Stage-1 call, stored in local state — never shown to the user. |
-| **Likes / Comments at 1h** | Raw engagement 60 minutes after posting | The **only two numbers** a user should ever type. Everything else is automatic. |
+If OpenAI is enabled on the backend, responses are GPT-powered. If not, the heuristic provider runs transparently. The frontend UX is identical either way.
 
-### The correct end-user flow
+See `backend/README.md` → AI Provider section for the toggle instructions.
 
-**Onboarding (one-time, ~2 minutes):**
-1. "What's your Instagram handle?" → `POST /accounts`
-2. "What kind of content do you post?" (pick a niche from a human-readable list) → sets `cluster_tier` and initial `cluster_id`
-3. "Paste your last few post reach numbers so we can calibrate" → `POST /accounts/{id}/posts` with `reach_24h` → backend auto-builds rolling features
+---
 
-**Before posting:**
-1. "Describe this post" or "paste your caption" → backend infers `cluster_id`
-2. "What time will you post?" → `hour_of_day` from time-picker
-3. "How good is this one?" (1–5 stars) → maps to `content_quality`
-4. → **Predict** button → backend calls `GET /accounts/{id}` for rolling features, then `POST /predict/stage1` → show result
+## Stage-1 Context — How Data Flows Between Pages
 
-**After posting (~1 hour in):**
-1. "How many likes and comments do you have right now?" → two number inputs
-2. → **Update prediction** → backend calls `POST /predict/stage2` → show updated result
+After a Pre-Post prediction succeeds, this object is saved to `localStorage`:
 
-This maps cleanly onto the backend endpoints that already exist: `POST /accounts`, `POST /accounts/{id}/posts`, `PATCH /posts/{id}/velocity`.
+```ts
+{
+  prediction_id:           number
+  stage1_prior:            number   // survival_probability from Stage-1
+  survival_probability:    number
+  rolling_weighted_median: number
+  cluster_tier:            'strong' | 'medium' | 'weak'
+  survives:                boolean
+  confidence:              'high' | 'medium' | 'low'
+  saved_at:                string   // ISO timestamp
+}
+```
+
+The 1h Check-in page loads this on mount and uses it to auto-fill the Stage-2 request. The user only needs to type likes and comments.
 
 ---
 
@@ -129,3 +161,23 @@ VITE_API_BASE=https://your-backend-domain.com
 ```
 
 Without it, requests go to `/api/*` which Vite proxies to `localhost:8000` during development.
+
+---
+
+## Parameter Source Reference
+
+This table documents what each ML input maps to in the UI so no developer ever re-exposes these as raw form fields.
+
+| ML parameter | UI source | Auto or manual |
+|---|---|---|
+| `rolling_weighted_median` | "Typical reach per Reel" number input | Manual (one number) |
+| `rolling_volatility` | Auto-computed as 15% of median | Auto |
+| `posting_frequency` | "How often do you post?" dropdown | Auto |
+| `cluster_entropy` | Default 1.5 (future: computed from post history) | Auto |
+| `cluster_id` | Niche dropdown — auto-filled by `POST /meta/detect-niche` | Auto (user can override) |
+| `cluster_tier` | Derived from niche selection via `GET /meta/niches` | Auto |
+| `content_quality` | `POST /meta/score-content` result | Auto |
+| `hour_of_day` | "What time will you post?" time picker | Manual (one field) |
+| `stage1_prior` | Stored in `localStorage` from prior Stage-1 result | Auto |
+| `likes_1h` | "Likes" number input on 1h Check-in | Manual |
+| `comments_1h` | "Comments" number input on 1h Check-in | Manual |

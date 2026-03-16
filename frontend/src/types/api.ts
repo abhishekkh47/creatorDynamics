@@ -15,6 +15,17 @@ export interface ContentScoreRequest {
   hashtags?: string
 }
 
+export interface NicheDetectRequest {
+  caption:  string
+  hashtags?: string
+}
+
+export interface NicheDetectResponse {
+  cluster_id: number
+  confidence: number   // 0–1
+  reasoning:  string
+}
+
 export interface ContentScoreBreakdown {
   hook_strength:      number
   cta_presence:       number
