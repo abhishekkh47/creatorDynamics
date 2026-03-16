@@ -23,12 +23,13 @@ import os
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from cluster_config import CLUSTER_NICHES
+from cluster_config import CLUSTER_NICHES, NICHE_KEYWORDS  # CLUSTER_NICHES used for niche label lookup
 from content_scorer import (
     ContentScoreResult,
     ScoreBreakdown,
     score_content as _heuristic_score,
 )
+from prompts import build_detect_niche_prompt, build_score_content_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -60,31 +61,6 @@ class AIProvider(ABC):
 # Heuristic provider — fully offline, zero external dependencies
 # ---------------------------------------------------------------------------
 
-# Keyword bank mapping cluster_id → relevant terms
-_NICHE_KEYWORDS: dict[int, list[str]] = {
-    0:  ["fitness", "workout", "gym", "health", "exercise", "training", "muscle", "diet", "hiit", "cardio"],
-    1:  ["beauty", "makeup", "skincare", "cosmetic", "glow", "foundation", "lipstick", "serum", "blush"],
-    2:  ["food", "recipe", "cooking", "eat", "delicious", "kitchen", "meal", "dish", "bake", "cuisine"],
-    3:  ["travel", "adventure", "explore", "destination", "vacation", "trip", "wanderlust", "journey", "abroad"],
-    4:  ["fashion", "style", "outfit", "clothing", "ootd", "wear", "wardrobe", "trend", "streetwear"],
-    5:  ["finance", "money", "invest", "stock", "wealth", "budget", "crypto", "trading", "savings", "passive income"],
-    6:  ["tech", "technology", "gadget", "software", "code", "app", "ai", "innovation", "programming", "developer"],
-    7:  ["funny", "comedy", "humor", "laugh", "joke", "meme", "entertainment", "viral", "trending", "skit"],
-    8:  ["lifestyle", "daily", "routine", "productivity", "life", "morning", "evening", "vlog", "everyday"],
-    9:  ["education", "learn", "tutorial", "how to", "tips", "knowledge", "study", "guide", "explained", "facts"],
-    10: ["music", "dance", "song", "artist", "perform", "sing", "choreography", "beat", "lyrics", "album"],
-    11: ["gaming", "game", "play", "gamer", "esports", "stream", "twitch", "console", "fps", "rpg"],
-    12: ["parenting", "mom", "dad", "baby", "kids", "family", "children", "parent", "toddler", "newborn"],
-    13: ["art", "creative", "paint", "draw", "design", "artist", "illustration", "craft", "portfolio", "sketch"],
-    14: ["sports", "athlete", "football", "basketball", "soccer", "cricket", "match", "team", "training", "coach"],
-    15: ["business", "entrepreneur", "startup", "marketing", "brand", "strategy", "growth", "sales", "founder"],
-    16: ["pets", "dog", "cat", "animal", "puppy", "kitten", "paw", "fur", "pet owner", "rescue"],
-    17: ["mental health", "wellness", "mindfulness", "meditation", "anxiety", "self care", "therapy", "healing"],
-    18: ["diy", "home", "decor", "garden", "renovation", "interior", "craft", "handmade", "upcycle", "thrift"],
-    19: ["news", "politics", "opinion", "commentary", "current events", "world", "update", "breaking"],
-}
-
-
 class HeuristicProvider(AIProvider):
     """
     Fully offline provider.  Uses the existing rule-based content scorer and
@@ -97,8 +73,8 @@ class HeuristicProvider(AIProvider):
     def detect_niche(self, caption: str, hashtags: str) -> NicheDetectionResult:
         text = (caption + " " + hashtags).lower()
 
-        scores: dict[int, int] = {cid: 0 for cid in _NICHE_KEYWORDS}
-        for cluster_id, keywords in _NICHE_KEYWORDS.items():
+        scores: dict[int, int] = {cid: 0 for cid in NICHE_KEYWORDS}
+        for cluster_id, keywords in NICHE_KEYWORDS.items():
             scores[cluster_id] = sum(1 for kw in keywords if kw in text)
 
         best_id    = max(scores, key=lambda k: scores[k])
@@ -107,19 +83,33 @@ class HeuristicProvider(AIProvider):
         if best_count == 0:
             return NicheDetectionResult(
                 cluster_id=8,
-                confidence=0.25,
+                confidence=0.28,
                 reasoning="No strong niche signals detected — defaulted to Lifestyle.",
             )
 
-        confidence  = min(0.40 + best_count * 0.12, 0.82)
+        # Confidence calibrated to match OpenAI provider's scale:
+        #   1 keyword match  → ~0.45 (weak signal)
+        #   2 keyword matches → ~0.55
+        #   3–4 matches      → ~0.65–0.70 (reasonable guess)
+        #   5+ matches       → ~0.75 (strong signal, hard cap at 0.78 for heuristic)
+        second_best = sorted(scores.values(), reverse=True)[1] if len(scores) > 1 else 0
+        separation  = best_count - second_best   # how far ahead of the next best niche
+
+        base_confidence = min(0.38 + best_count * 0.08, 0.72)
+        if separation >= 3:
+            base_confidence = min(base_confidence + 0.06, 0.78)
+
         niche_label = next(
             (n["label"] for n in CLUSTER_NICHES if n["cluster_id"] == best_id),
             "Unknown",
         )
         return NicheDetectionResult(
             cluster_id=best_id,
-            confidence=round(confidence, 2),
-            reasoning=f"Matched {best_count} keyword(s) for {niche_label}.",
+            confidence=round(base_confidence, 2),
+            reasoning=(
+                f"Matched {best_count} keyword(s) for {niche_label}"
+                + (f" ({separation} ahead of next closest niche)." if separation > 0 else ".")
+            ),
         )
 
 
@@ -162,32 +152,7 @@ class OpenAIProvider(AIProvider):
     # ------------------------------------------------------------------
 
     def _openai_score(self, caption: str, hashtags: str) -> ContentScoreResult:
-        prompt = (
-            "You are an expert Instagram content analyst. "
-            "Score this Reel caption and hashtags on 5 quality signals.\n\n"
-            f"Caption:\n{caption}\n\n"
-            f"Hashtags: {hashtags or '(none)'}\n\n"
-            "Rate each signal 0.0–1.0:\n"
-            "- hook_strength: Is the opening line compelling? "
-            "Questions, numbers, curiosity gaps, bold claims score higher.\n"
-            "- cta_presence: Is there a clear call-to-action "
-            "(save, comment, share, follow, link in bio, DM)?\n"
-            "- hashtag_quality: Are 3–10 focused hashtags used? "
-            "Too few (<3) or too many (>15) reduces the score.\n"
-            "- caption_length: Is caption 100–300 chars (ideal range)? "
-            "Very short or very long reduces score.\n"
-            "- engagement_signals: Emojis, in-body questions, exclamation marks.\n\n"
-            "Also provide:\n"
-            "- quality_score: weighted 0.0–1.0 overall (hook 30%, cta 25%, "
-            "hashtag 20%, length 15%, engagement 10%)\n"
-            "- grade: exactly one of: Excellent, Good, Average, Needs Work\n"
-            "- tips: array of up to 3 short, specific, actionable tips "
-            "(empty array [] if grade is Excellent)\n\n"
-            "Return ONLY valid JSON:\n"
-            '{"quality_score":0.82,"grade":"Good","breakdown":{"hook_strength":0.9,'
-            '"cta_presence":0.8,"hashtag_quality":0.7,"caption_length":0.8,'
-            '"engagement_signals":0.75},"tips":["Add a CTA like \'Save this\'"]}'
-        )
+        prompt = build_score_content_prompt(caption, hashtags)
 
         response = self._client.chat.completions.create(
             model=self._MODEL,
@@ -213,23 +178,7 @@ class OpenAIProvider(AIProvider):
         )
 
     def _openai_detect(self, caption: str, hashtags: str) -> NicheDetectionResult:
-        niche_list = "\n".join(
-            f"  cluster_id={n['cluster_id']}: {n['label']} ({n['tier']} tier)"
-            for n in CLUSTER_NICHES
-        )
-        prompt = (
-            "You are an Instagram content categorization expert.\n"
-            "Given this Reel caption and hashtags, identify the single best-matching "
-            "content niche from the list below.\n\n"
-            f"Caption:\n{caption}\n\n"
-            f"Hashtags: {hashtags or '(none)'}\n\n"
-            f"Available niches:\n{niche_list}\n\n"
-            "Pick the PRIMARY niche. If multiple fit, choose the most dominant one.\n"
-            "confidence should reflect your certainty (0.0–1.0).\n"
-            "reasoning should be one concise sentence.\n\n"
-            "Return ONLY valid JSON:\n"
-            '{"cluster_id":7,"confidence":0.92,"reasoning":"Caption is about comedy skits."}'
-        )
+        prompt = build_detect_niche_prompt(caption, hashtags)
         response = self._client.chat.completions.create(
             model=self._MODEL,
             messages=[{"role": "user", "content": prompt}],
