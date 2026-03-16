@@ -26,8 +26,15 @@ def generate_accounts(
     accounts = []
 
     for i in range(n_accounts):
-        follower_count = int(np.clip(np.random.lognormal(mean=9, sigma=1.5), 500, 2_000_000))
-        baseline_reach_ratio = float(np.random.beta(2, 5))
+        # Target realistic active Instagram creators: 2k–2M followers, median ~36k.
+        # Previous distribution (mean=9, σ=1.5) produced median follower_count ≈ 8k
+        # with most accounts below 5k, causing training rolling_weighted_median to
+        # cluster around 193 — far below what real creators produce (2k–50k reach).
+        follower_count = int(np.clip(np.random.lognormal(mean=10.5, sigma=1.2), 2_000, 5_000_000))
+
+        # Reels can reach well beyond follower count via Explore/For-You distribution.
+        # Beta(2,3) → mean 0.40, range ≈ 0.05–0.85 (vs old Beta(2,5) mean 0.29).
+        baseline_reach_ratio = float(np.random.beta(2, 3))
         quality_mean = float(np.random.uniform(0.3, 0.9))
         quality_variance = float(np.random.uniform(0.15, 0.35))
         velocity_sensitivity = float(np.random.uniform(0.1, 0.5))

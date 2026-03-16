@@ -45,8 +45,8 @@ _TIER_BURST: dict[str, float] = {
 }
 
 # Decision thresholds chosen from threshold analysis in the experiment log
-STAGE1_THRESHOLD = 0.35   # max-F1 threshold for Stage-1
-STAGE2_THRESHOLD = 0.55   # max-F1 threshold for Stage-2 (1h model)
+STAGE1_THRESHOLD = 0.45   # max-F1 threshold for Stage-1  (updated after retrain — see run_report.json)
+STAGE2_THRESHOLD = 0.50   # max-F1 threshold for Stage-2  (updated after retrain — see run_report.json)
 
 
 # ---------------------------------------------------------------------------
