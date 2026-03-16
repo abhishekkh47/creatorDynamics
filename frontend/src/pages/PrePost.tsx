@@ -27,7 +27,7 @@ function buildAdvancedDefaults(
 ): AdvancedForm {
   return {
     rolling_weighted_median: String(reach),
-    rolling_volatility:      String(Math.max(100, Math.round(reach * 0.15))),
+    rolling_volatility:      String(Math.max(100, Math.round(reach * 0.55))),
     posting_frequency:       String(freqValue),
     cluster_entropy:         '1.5',
     content_quality:         String(contentQuality.toFixed(3)),
@@ -141,7 +141,7 @@ export default function PrePost() {
     const r = Number(reach) || 8500
     return {
       rolling_weighted_median: r,
-      rolling_volatility:      Math.max(100, Math.round(r * 0.15)),
+      rolling_volatility:      Math.max(100, Math.round(r * 0.55)),
       posting_frequency:       freqValue,
       cluster_entropy:         1.5,
       content_quality:         scoreResult?.quality_score ?? 0.6,
@@ -382,7 +382,7 @@ export default function PrePost() {
 
                 <AdvField
                   label="Rolling volatility"
-                  hint="Reach variability (auto: 15% of median)"
+                  hint="Reach variability — std of recent post reach (auto: ~55% of median)"
                 >
                   <input type="number" step="any" min="0" value={advForm.rolling_volatility} onChange={setAdv('rolling_volatility')} />
                 </AdvField>
