@@ -78,6 +78,46 @@ frontend/
 
 ---
 
+## Why the Current Forms Are Wrong — UX Rebuild Plan
+
+The current Pre-Post and Live Tracker pages expose raw ML feature inputs directly to the end user. **This is a developer test harness, not a product.** No real creator knows what "rolling weighted median reach" or "cluster entropy" means.
+
+### What the forms currently ask vs. what they should ask
+
+| Parameter shown today | What it actually is | How it should be sourced in v2 |
+|---|---|---|
+| **Rolling weighted median reach** | Exponentially-weighted median of the account's last ~20 posts' reach | Computed automatically by `feature_engine.py` from post history stored in the DB. Exposed via `GET /accounts/{id}`. |
+| **Rolling volatility** | Std deviation of log-reach across recent posts | Same — auto-computed alongside the median. |
+| **Posting frequency** | Number of posts in the last 14 days | Count of rows in the `Post` table for this account. |
+| **Cluster entropy** | Shannon entropy of which topics the account posts about | Computed from per-post topic distribution stored in the `FeatureStore`. |
+| **Cluster ID** | Which of the 20 topic clusters this post belongs to | Inferred from caption/hashtags at post creation time using the topic model. |
+| **Cluster tier** | Whether this niche historically performs well (strong/medium/weak) | Precomputed lookup by cluster — set during account onboarding, invisible to user. |
+| **Content quality** | 0–1 score for hook, caption, hashtag quality | Map from a simple 1–5 star rating the user gives before posting. |
+| **Hour of day** | Posting hour | Read from the post timestamp — or ask "what time will you post?" with a time-picker. |
+| **Prediction ID / Stage-1 prior** | Internal ML state passed between stages | Returned by the backend on Stage-1 call, stored in local state — never shown to the user. |
+| **Likes / Comments at 1h** | Raw engagement 60 minutes after posting | The **only two numbers** a user should ever type. Everything else is automatic. |
+
+### The correct end-user flow
+
+**Onboarding (one-time, ~2 minutes):**
+1. "What's your Instagram handle?" → `POST /accounts`
+2. "What kind of content do you post?" (pick a niche from a human-readable list) → sets `cluster_tier` and initial `cluster_id`
+3. "Paste your last few post reach numbers so we can calibrate" → `POST /accounts/{id}/posts` with `reach_24h` → backend auto-builds rolling features
+
+**Before posting:**
+1. "Describe this post" or "paste your caption" → backend infers `cluster_id`
+2. "What time will you post?" → `hour_of_day` from time-picker
+3. "How good is this one?" (1–5 stars) → maps to `content_quality`
+4. → **Predict** button → backend calls `GET /accounts/{id}` for rolling features, then `POST /predict/stage1` → show result
+
+**After posting (~1 hour in):**
+1. "How many likes and comments do you have right now?" → two number inputs
+2. → **Update prediction** → backend calls `POST /predict/stage2` → show updated result
+
+This maps cleanly onto the backend endpoints that already exist: `POST /accounts`, `POST /accounts/{id}/posts`, `PATCH /posts/{id}/velocity`.
+
+---
+
 ## Relationship to Backend
 
 The frontend talks **only** to the backend API — no direct ML engine access, no model files. All prediction logic stays server-side.

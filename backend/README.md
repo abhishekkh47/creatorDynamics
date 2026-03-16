@@ -303,6 +303,28 @@ The Stage-2 model corrects the Stage-1 prior most aggressively when Stage-1 was 
 
 ---
 
+## Feature Computation Reference — Where Each ML Input Comes From
+
+The manual prediction endpoints (`POST /predict/stage1`, `POST /predict/stage2`) require callers to supply feature values. In the **account-based flow** (Phase 4), all of these are computed automatically. This table is the source of truth for what each feature is and where it originates — it exists so no developer ever exposes these to an end user again.
+
+| Feature | What it is in plain English | Computed by | When |
+|---|---|---|---|
+| `rolling_weighted_median` | Typical reach for this account's recent posts | `feature_engine.py → compute_rolling_features()` | After every `PATCH /posts/{id}/reach` call |
+| `rolling_volatility` | How consistent the account's reach is post-to-post | Same as above | Same as above |
+| `posting_frequency` | Posts published in the last 14 days | Count of `Post` rows for this account in the last 14 days | Computed at prediction time |
+| `cluster_entropy` | How varied the account's content topics are | `feature_engine.py` from per-post `cluster_id` history | After every `PATCH /posts/{id}/reach` call |
+| `cluster_id` | Which topic cluster this specific post belongs to | Inferred from caption/hashtags using the topic model at post creation | `POST /accounts/{id}/posts` |
+| `cluster_tier` | Whether this niche historically performs well | Precomputed lookup table keyed by `cluster_id` — set at account creation | `POST /accounts` onboarding |
+| `content_quality` | Quality of hook, caption, hashtag combination (0–1) | Map from a 1–5 star rating supplied by the user; the **only** subjective input | `POST /accounts/{id}/posts` |
+| `hour_of_day` | Hour of day the post goes live | Extracted from the post's `created_at` timestamp | `POST /accounts/{id}/posts` |
+| `stage1_prior` | Stage-1 survival probability, passed into Stage-2 | Returned by `POST /predict/stage1`, stored on the `Prediction` row | Automatic in account flow |
+| `likes_1h` | Raw like count ~60 minutes after posting | Entered by the user OR fetched from Instagram Graph API | `PATCH /posts/{id}/velocity` |
+| `comments_1h` | Raw comment count ~60 minutes after posting | Same as `likes_1h` | `PATCH /posts/{id}/velocity` |
+
+**Rule:** `likes_1h` and `comments_1h` are the only two values a real end user should ever type manually. Everything else is either computed from stored history, inferred from content, or returned by a previous API call.
+
+---
+
 ## Real-Data Flow (Phase 4 — Complete)
 
 The full real-data lifecycle is implemented and live:

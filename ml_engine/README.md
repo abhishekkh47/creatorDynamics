@@ -116,6 +116,35 @@ ml_engine/
 
 ---
 
+## Feature Dictionary — Plain-English Reference
+
+The 7 Stage-1 features and 4 Stage-2 features are defined here in plain English, alongside how they should be sourced in production. This table exists so that no developer mistakes these for "user inputs" — they are all computed or inferred automatically.
+
+### Stage-1 Features (pre-post prediction)
+
+| Feature name | Plain English | Production source |
+|---|---|---|
+| `rolling_weighted_median` | The account's typical reach across their last ~20 posts, with recent posts weighted more | Computed by `backend/feature_engine.py` from post history in the DB |
+| `rolling_volatility` | How much the account's reach varies — a high number means unpredictable reach | Computed alongside the median from the same post history |
+| `posting_frequency` | How often the account has posted in the last 14 days | Count of `Post` rows in the last 14 days for this account |
+| `cluster_entropy` | How diverse the account's content topics are — a creator who mixes cooking and finance has high entropy | Computed from the distribution of `cluster_id` values across the account's post history |
+| `cluster_id` | Which of the 20 topic clusters this specific post belongs to (0–19) | Inferred from post caption and hashtags using the topic model at post creation time |
+| `posting_time_bucket` | Broad time-of-day band: 0 = night, 1 = morning, 2 = afternoon, 3 = evening | Derived from the post's timestamp — not a user input |
+| `content_quality` | A 0–1 quality score for the post's hook, caption, and hashtag combination | Mapped from a 1–5 star rating the user gives before posting; the **only** user-provided feature |
+
+### Stage-2 Features (1h velocity correction)
+
+| Feature name | Plain English | Production source |
+|---|---|---|
+| `stage1_prior` | The Stage-1 survival probability — Stage-2 uses it as its starting point | Returned by the Stage-1 inference call; stored on the `Prediction` row in the backend |
+| `rolling_weighted_median` | Same value used in Stage-1 | Passed through from the Stage-1 call; no re-computation needed |
+| `likes_1h` | Raw like count approximately 60 minutes after the post went live | Entered by the user **or** fetched via Instagram Graph API webhook |
+| `comments_1h` | Raw comment count at the same 1h checkpoint | Same as `likes_1h` |
+
+> **Bottom line for product:** the only numbers an end user should ever type are `likes_1h` and `comments_1h`. Every other feature is derived from stored account history, content inference, or prior API call responses.
+
+---
+
 ## Key Design Decisions
 
 **Why synthetic data?**
