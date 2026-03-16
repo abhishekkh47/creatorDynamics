@@ -5,6 +5,7 @@ Entry point — app creation, lifespan, middleware, and router registration.
 
 Route ownership:
   routers/health.py       → GET  /health
+  routers/meta.py         → GET  /meta/niches
   routers/accounts.py     → POST /accounts, GET /accounts/{id}
   routers/posts.py        → POST /accounts/{id}/posts
                             GET  /posts/{id}
@@ -22,7 +23,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from predictor import model_store
-from routers import accounts, health, posts, predictions
+from routers import accounts, health, meta, posts, predictions
 
 
 @asynccontextmanager
@@ -62,6 +63,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(meta.router)
 app.include_router(accounts.router)
 app.include_router(posts.router)
 app.include_router(predictions.router)

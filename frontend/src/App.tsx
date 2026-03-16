@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import NavBar from '@/components/NavBar'
 import PrePost from '@/pages/PrePost'
 import LiveTracker from '@/pages/LiveTracker'
@@ -14,6 +14,8 @@ export default function App() {
             <Route path="/"         element={<PrePost />} />
             <Route path="/tracker"  element={<LiveTracker />} />
             <Route path="/history"  element={<History />} />
+            {/* Redirect any unknown path to home */}
+            <Route path="*"         element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>

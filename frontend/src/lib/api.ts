@@ -6,7 +6,10 @@
  */
 
 import type {
+  ContentScoreRequest,
+  ContentScoreResponse,
   HealthResponse,
+  NicheOption,
   PredictionSummary,
   Stage1Request,
   Stage1Response,
@@ -35,6 +38,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () =>
     request<HealthResponse>('/health'),
+
+  getNiches: () =>
+    request<NicheOption[]>('/meta/niches'),
+
+  scoreContent: (body: ContentScoreRequest) =>
+    request<ContentScoreResponse>('/meta/score-content', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   predictStage1: (body: Stage1Request) =>
     request<Stage1Response>('/predict/stage1', {

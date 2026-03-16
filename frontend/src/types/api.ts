@@ -2,6 +2,34 @@
 // API types — mirrors backend/schemas.py
 // ---------------------------------------------------------------------------
 
+// --- Meta ---
+
+export interface NicheOption {
+  cluster_id: number
+  label: string
+  tier: 'strong' | 'medium' | 'weak'
+}
+
+export interface ContentScoreRequest {
+  caption:  string
+  hashtags?: string
+}
+
+export interface ContentScoreBreakdown {
+  hook_strength:      number
+  cta_presence:       number
+  hashtag_quality:    number
+  caption_length:     number
+  engagement_signals: number
+}
+
+export interface ContentScoreResponse {
+  quality_score: number
+  grade: 'Excellent' | 'Good' | 'Average' | 'Needs Work'
+  breakdown: ContentScoreBreakdown
+  tips: string[]
+}
+
 export interface HealthResponse {
   status: 'ok' | 'degraded'
   models: Record<string, { loaded: boolean; file: string }>

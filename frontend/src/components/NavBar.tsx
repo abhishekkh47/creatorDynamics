@@ -1,9 +1,9 @@
 import { NavLink } from 'react-router-dom'
 
 const links = [
-  { to: '/',          label: 'Pre-Post' },
-  { to: '/tracker',   label: 'Live Tracker' },
-  { to: '/history',   label: 'History' },
+  { to: '/',        label: 'Pre-Post Predict' },
+  { to: '/tracker', label: '1h Check-in' },
+  { to: '/history', label: 'History' },
 ]
 
 export default function NavBar() {
