@@ -9,6 +9,8 @@ import type {
   ContentScoreRequest,
   ContentScoreResponse,
   HealthResponse,
+  NicheDetectRequest,
+  NicheDetectResponse,
   NicheOption,
   PredictionSummary,
   Stage1Request,
@@ -44,6 +46,12 @@ export const api = {
 
   scoreContent: (body: ContentScoreRequest) =>
     request<ContentScoreResponse>('/meta/score-content', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  detectNiche: (body: NicheDetectRequest) =>
+    request<NicheDetectResponse>('/meta/detect-niche', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

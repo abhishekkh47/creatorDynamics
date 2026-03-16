@@ -7,3 +7,5 @@ sqlalchemy
 psycopg2-binary
 python-dotenv
 alembic
+# Optional — remove to disable OpenAI and use heuristic provider instead
+openai

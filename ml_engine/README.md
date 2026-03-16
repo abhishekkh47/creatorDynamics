@@ -128,9 +128,9 @@ The 7 Stage-1 features and 4 Stage-2 features are defined here in plain English,
 | `rolling_volatility` | How much the account's reach varies — a high number means unpredictable reach | Computed alongside the median from the same post history |
 | `posting_frequency` | How often the account has posted in the last 14 days | Count of `Post` rows in the last 14 days for this account |
 | `cluster_entropy` | How diverse the account's content topics are — a creator who mixes cooking and finance has high entropy | Computed from the distribution of `cluster_id` values across the account's post history |
-| `cluster_id` | Which of the 20 topic clusters this specific post belongs to (0–19) | Inferred from post caption and hashtags using the topic model at post creation time |
+| `cluster_id` | Which of the 20 topic clusters this specific post belongs to (0–19) | Auto-detected by `backend/ai_provider.py → detect_niche()` from caption + hashtags (OpenAI or keyword matching); user can override in the UI |
 | `posting_time_bucket` | Broad time-of-day band: 0 = night, 1 = morning, 2 = afternoon, 3 = evening | Derived from the post's timestamp — not a user input |
-| `content_quality` | A 0–1 quality score for the post's hook, caption, and hashtag combination | Mapped from a 1–5 star rating the user gives before posting; the **only** user-provided feature |
+| `content_quality` | A 0–1 quality score for the post's hook, caption, and hashtag combination | Auto-scored by `backend/ai_provider.py → score_content()` from caption + hashtags (OpenAI or heuristic); no manual input required |
 
 ### Stage-2 Features (1h velocity correction)
 
@@ -141,7 +141,7 @@ The 7 Stage-1 features and 4 Stage-2 features are defined here in plain English,
 | `likes_1h` | Raw like count approximately 60 minutes after the post went live | Entered by the user **or** fetched via Instagram Graph API webhook |
 | `comments_1h` | Raw comment count at the same 1h checkpoint | Same as `likes_1h` |
 
-> **Bottom line for product:** the only numbers an end user should ever type are `likes_1h` and `comments_1h`. Every other feature is derived from stored account history, content inference, or prior API call responses.
+> **Bottom line for product:** the only numbers an end user should ever type are `likes_1h` and `comments_1h`. Every other feature is derived from stored account history, AI-inferred from content, or passed automatically between API calls.
 
 ---
 
@@ -197,7 +197,9 @@ print(f"Predicted survival probability: {prob:.3f}")
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Synthetic simulation + Stage-1 survival model + deep evaluation | Complete ✓ |
-| 2 | Stage-2 velocity correction model (early engagement signals) | In progress |
-| 3 | Real Instagram API ingestion | Planned |
-| 4 | Backend API serving predictions | Planned |
-| 5 | Deployment as microservice | Planned |
+| 2 | Stage-2 velocity correction model (early engagement signals) | Complete ✓ |
+| 3 | Backend API serving predictions + real-data lifecycle (account → post → velocity → reach) | Complete ✓ |
+| 4 | End-user frontend: AI content scoring, auto niche detection, plug-n-play OpenAI provider | Complete ✓ |
+| 5 | Real Instagram Graph API ingestion (replace manual `likes_1h` / `comments_1h` entry) | Planned |
+| 6 | Model retraining on real creator data + cluster reassignment | Planned |
+| 7 | Deployment as hosted microservice | Planned |
